@@ -138,10 +138,20 @@ UERANSIM Traffic → Open5GS Processing → Prometheus Metrics → ML Models →
 **UERANSIM**
 - gNB binary built successfully
 
+**UERANSIM + N2 Integration (Day 3)**
+- gNB built and connected to AMF via SCTP/NGAP (NG Setup successful)
+- Root cause of SCTP failure: usrsctp `sctp_no_csum_on_loopback` only fires when
+  src==dst IP. Fix: bind both AMF NGAP and gNB to `127.0.0.1` (not separate aliases).
+  AMF NGAP: `0.0.0.0` or `127.0.0.5` both fail; `127.0.0.1` works.
+  gNB amfConfigs: changed from `127.0.0.5` → `127.0.0.1`.
+- UE registered successfully: SUPI=imsi-999700000000001 assigned IPv4=10.45.0.2
+- PDU Session established on DNN=internet, SST=1
+- TUN interface creation requires sudo (run `sudo ./build/nr-ue -c config/open5gs-ue.yaml`)
+
 ### ⏳ IN PROGRESS
-- Starting all NFs and verifying registration with NRF
-- Adding test subscriber to MongoDB
-- Configuring UERANSIM for first UE registration
+- Run UE with sudo to create uesimtun0 TUN interface
+- Ping test: ping 8.8.8.8 from UE (via UPF NAT)
+- First UE registration + ping test
 
 ### 🔲 NOT STARTED
 - Phase 2: Docker containerisation
