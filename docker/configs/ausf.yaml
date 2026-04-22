@@ -1,0 +1,21 @@
+logger:
+  level: info
+
+global:
+  max:
+    ue: 1024
+
+ausf:
+  sbi:
+    server:
+      - address: 0.0.0.0
+        port: 80
+        advertise: ausf
+    client:
+      nrf:
+        - uri: http://nrf
+
+time:
+  nf_instance:
+    validity: 86400
+    heartbeat: 60

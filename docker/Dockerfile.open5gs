@@ -1,0 +1,126 @@
+# =============================================================================
+# Dockerfile.open5gs — Multi-stage build for all Open5GS 5G SA NFs
+#
+# Usage (built by docker-compose; can also be built manually):
+#   docker build -f docker/Dockerfile.open5gs \
+#     --build-arg NF_NAME=nrf -t open5gs-nrf .
+#
+# The build-arg NF_NAME selects which NF binary to include in the runtime
+# image.  Valid values: nrf scp udr udm ausf bsf nssf pcf amf smf upf
+#
+# Build context must be the 5g-project root (where open5gs/ lives).
+# =============================================================================
+
+# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Build dependencies (exact list from upstream jammy/base/Dockerfile)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-pip \
+        python3-setuptools \
+        python3-wheel \
+        ninja-build \
+        build-essential \
+        flex \
+        bison \
+        git \
+        cmake \
+        meson \
+        libsctp-dev \
+        libgnutls28-dev \
+        libgcrypt-dev \
+        libssl-dev \
+        libidn11-dev \
+        libmongoc-dev \
+        libbson-dev \
+        libyaml-dev \
+        libmicrohttpd-dev \
+        libcurl4-gnutls-dev \
+        libnghttp2-dev \
+        libtins-dev \
+        libtalloc-dev \
+        iproute2 \
+        ca-certificates \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the Open5GS source tree (relative to 5g-project root)
+COPY open5gs/ /src/open5gs/
+
+WORKDIR /src/open5gs
+
+# Configure + build + install into /open5gs prefix
+RUN meson setup \
+        --prefix=/open5gs \
+        --buildtype=release \
+        -Db_lto=false \
+        build \
+    && ninja -C build -j$(nproc) \
+    && ninja -C build install
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS runtime
+
+ARG NF_NAME
+ARG DEBIAN_FRONTEND=noninteractive
+
+LABEL maintainer="Nigel Kadzinga <nigelkadzinga91@gmail.com>" \
+      project="HIT FYP — Cloud-Native 5G SA Core" \
+      nf="${NF_NAME}"
+
+# Runtime-only libraries (no -dev headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libsctp1 \
+        libgnutls30 \
+        libgcrypt20 \
+        libssl3 \
+        libidn12 \
+        libidn2-0 \
+        libmongoc-1.0-0 \
+        libbson-1.0-0 \
+        libyaml-0-2 \
+        libmicrohttpd12 \
+        libcurl4 \
+        libnghttp2-14 \
+        libtins4.0 \
+        libtalloc2 \
+        iproute2 \
+        iptables \
+        iputils-ping \
+        curl \
+        libcurl3-gnutls \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed Open5GS tree from builder
+COPY --from=builder /open5gs/bin/open5gs-${NF_NAME}d  /usr/local/bin/open5gs-${NF_NAME}d
+COPY --from=builder /open5gs/lib/                      /usr/local/lib/open5gs/
+COPY --from=builder /open5gs/etc/open5gs/tls/          /etc/open5gs/tls/
+
+# Update dynamic linker cache — meson installs libs under an arch subdir
+# e.g. /usr/local/lib/open5gs/aarch64-linux-gnu/ or x86_64-linux-gnu/
+RUN find /usr/local/lib/open5gs -maxdepth 2 -type d \
+        | tee /etc/ld.so.conf.d/open5gs.conf \
+    && ldconfig
+
+# Config is bind-mounted at runtime (see docker-compose.yml)
+# but provide the directory so the binary can always find /etc/open5gs/
+RUN mkdir -p /etc/open5gs /var/log/open5gs
+
+# Run as non-root except UPF (which needs NET_ADMIN — handled by docker-compose)
+RUN groupadd -r open5gs && useradd -r -g open5gs open5gs
+
+# Default config location (overridden by -c in CMD when needed)
+ENV NF_NAME=${NF_NAME}
+
+EXPOSE 7777
+
+# Logs to stderr so docker logs works out of the box
+CMD ["/bin/sh", "-c", "exec /usr/local/bin/open5gs-${NF_NAME}d -c /etc/open5gs/${NF_NAME}.yaml"]
+
+# Generic process liveness check — works for all NFs including UPF.
+# NRF and AMF override this in docker-compose.yml with API-level checks.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
+    CMD pgrep -x open5gs-${NF_NAME}d > /dev/null || exit 1

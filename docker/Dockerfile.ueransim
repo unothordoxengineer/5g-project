@@ -1,0 +1,66 @@
+# =============================================================================
+# Dockerfile.ueransim — Multi-stage build for UERANSIM gNB and UE
+#
+# Usage (built by docker-compose):
+#   docker build -f docker/Dockerfile.ueransim \
+#     --build-arg COMPONENT=nr-gnb -t ueransim-gnb .
+#   docker build -f docker/Dockerfile.ueransim \
+#     --build-arg COMPONENT=nr-ue  -t ueransim-ue  .
+#
+# Build context: 5g-project root (where UERANSIM/ lives).
+# =============================================================================
+
+# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        git \
+        libsctp-dev \
+        lksctp-tools \
+        iproute2 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY UERANSIM/ /src/UERANSIM/
+
+WORKDIR /src/UERANSIM
+
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build -j$(nproc)
+
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM ubuntu:22.04 AS runtime
+
+ARG COMPONENT
+ARG DEBIAN_FRONTEND=noninteractive
+
+LABEL maintainer="Nigel Kadzinga <nigelkadzinga91@gmail.com>" \
+      project="HIT FYP — Cloud-Native 5G SA Core" \
+      component="${COMPONENT}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libsctp1 \
+        lksctp-tools \
+        iproute2 \
+        iputils-ping \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/UERANSIM/build/${COMPONENT} /usr/local/bin/${COMPONENT}
+
+RUN mkdir -p /etc/ueransim
+
+ENV COMPONENT=${COMPONENT}
+
+# gNB: NGAP (N2) + RLS (radio link sim)
+# UE:  RLS only
+EXPOSE 38412/sctp 4997/udp 2152/udp
+
+CMD ["/bin/sh", "-c", "exec /usr/local/bin/${COMPONENT} -c /etc/ueransim/${COMPONENT}.yaml"]
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
+    CMD pgrep -x ${COMPONENT} > /dev/null || exit 1

@@ -1,0 +1,346 @@
+# =============================================================================
+# docker-compose.yml — Open5GS 5G SA Core + UERANSIM
+#
+# All NFs compiled from source (Ubuntu 22.04 multi-stage build).
+# Start:  docker compose -f docker/docker-compose.yml up --build -d
+# Logs:   docker compose -f docker/docker-compose.yml logs -f amf smf upf
+# Stop:   docker compose -f docker/docker-compose.yml down -v
+#
+# Build context for all services is the 5g-project root directory.
+# Run from: ~/5g-project/
+#   docker compose -f docker/docker-compose.yml up --build
+# =============================================================================
+
+name: open5gs
+
+# ── Shared build config ───────────────────────────────────────────────────────
+x-open5gs-build: &open5gs-build
+  context: ..
+  dockerfile: docker/Dockerfile.open5gs
+
+# ── Common service settings ───────────────────────────────────────────────────
+# NOTE: YAML only allows one << merge key per mapping. Use << as a sequence to
+# merge multiple anchors:  << : [*anchor1, *anchor2]
+x-open5gs-common: &open5gs-common
+  restart: unless-stopped
+  networks:
+    - open5gs
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# ── Resource limits (mem_limit/cpus work in regular compose, not just swarm) ──
+x-small: &small
+  mem_limit: 256m
+  cpus: '0.50'
+
+x-medium: &medium
+  mem_limit: 512m
+  cpus: '1.00'
+
+services:
+
+  # ── MongoDB ────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:6.0
+    container_name: open5gs-mongodb
+    <<: [*open5gs-common, *small]
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── TIER 1: NRF ────────────────────────────────────────────────────────────
+  nrf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: nrf
+    image: open5gs-nrf:latest
+    container_name: open5gs-nrf
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/nrf.yaml:/etc/open5gs/nrf.yaml:ro
+    ports:
+      - "7777:80"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "--http2-prior-knowledge", "--max-time", "4", "http://127.0.0.1/nnrf-nfm/v1/nf-instances"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── TIER 1: SCP ────────────────────────────────────────────────────────────
+  scp:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: scp
+    image: open5gs-scp:latest
+    container_name: open5gs-scp
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/scp.yaml:/etc/open5gs/scp.yaml:ro
+    depends_on:
+      nrf:
+        condition: service_healthy
+
+  # ── TIER 2: UDR ────────────────────────────────────────────────────────────
+  udr:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: udr
+    image: open5gs-udr:latest
+    container_name: open5gs-udr
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/udr.yaml:/etc/open5gs/udr.yaml:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      scp:
+        condition: service_started
+
+  # ── TIER 2: UDM ────────────────────────────────────────────────────────────
+  udm:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: udm
+    image: open5gs-udm:latest
+    container_name: open5gs-udm
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/udm.yaml:/etc/open5gs/udm.yaml:ro
+    depends_on:
+      udr:
+        condition: service_started
+      scp:
+        condition: service_started
+
+  # ── TIER 3: AUSF ───────────────────────────────────────────────────────────
+  ausf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: ausf
+    image: open5gs-ausf:latest
+    container_name: open5gs-ausf
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/ausf.yaml:/etc/open5gs/ausf.yaml:ro
+    depends_on:
+      udm:
+        condition: service_started
+      scp:
+        condition: service_started
+
+  # ── TIER 4: BSF ────────────────────────────────────────────────────────────
+  bsf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: bsf
+    image: open5gs-bsf:latest
+    container_name: open5gs-bsf
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/bsf.yaml:/etc/open5gs/bsf.yaml:ro
+    depends_on:
+      scp:
+        condition: service_started
+
+  # ── TIER 4: NSSF ───────────────────────────────────────────────────────────
+  nssf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: nssf
+    image: open5gs-nssf:latest
+    container_name: open5gs-nssf
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/nssf.yaml:/etc/open5gs/nssf.yaml:ro
+    depends_on:
+      nrf:
+        condition: service_healthy
+      scp:
+        condition: service_started
+
+  # ── TIER 4: PCF ────────────────────────────────────────────────────────────
+  pcf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: pcf
+    image: open5gs-pcf:latest
+    container_name: open5gs-pcf
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./configs/pcf.yaml:/etc/open5gs/pcf.yaml:ro
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      scp:
+        condition: service_started
+
+  # ── TIER 5: AMF ────────────────────────────────────────────────────────────
+  amf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: amf
+    image: open5gs-amf:latest
+    container_name: open5gs-amf
+    <<: [*open5gs-common, *medium]
+    volumes:
+      - ./configs/amf.yaml:/etc/open5gs/amf.yaml:ro
+    ports:
+      - "38412:38412/sctp"  # N2 NGAP — gNB connects here
+    depends_on:
+      ausf:
+        condition: service_started
+      nssf:
+        condition: service_started
+      bsf:
+        condition: service_started
+      pcf:
+        condition: service_started
+      scp:
+        condition: service_started
+    # AMF healthy = process running + 30s start window for NRF registration
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x open5gs-amfd > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── TIER 5: SMF ────────────────────────────────────────────────────────────
+  smf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: smf
+    image: open5gs-smf:latest
+    container_name: open5gs-smf
+    <<: [*open5gs-common, *medium]
+    volumes:
+      - ./configs/smf.yaml:/etc/open5gs/smf.yaml:ro
+    depends_on:
+      amf:
+        condition: service_healthy
+      scp:
+        condition: service_started
+
+  # ── TIER 6: UPF ────────────────────────────────────────────────────────────
+  upf:
+    build:
+      <<: *open5gs-build
+      args:
+        NF_NAME: upf
+    image: open5gs-upf:latest
+    container_name: open5gs-upf
+    <<: [*open5gs-common, *medium]
+    volumes:
+      - ./configs/upf.yaml:/etc/open5gs/upf.yaml:ro
+      - ./upf-entrypoint.sh:/usr/local/bin/upf-entrypoint.sh:ro
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=0
+    # Use custom entrypoint to configure ogstun + NAT after UPF starts
+    entrypoint: ["/bin/sh", "/usr/local/bin/upf-entrypoint.sh"]
+    # No host port mappings needed — gNB reaches UPF via the Docker network
+    depends_on:
+      smf:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x open5gs-upfd > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── TIER 7: gNB ────────────────────────────────────────────────────────────
+  gnb:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ueransim
+      args:
+        COMPONENT: nr-gnb
+    image: ueransim-gnb:latest
+    container_name: ueransim-gnb
+    <<: [*open5gs-common, *small]
+    volumes:
+      - ./ueransim-config/nr-gnb.yaml:/etc/ueransim/nr-gnb.yaml:ro
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # No host port mapping — UE container reaches gNB via the Docker network
+    depends_on:
+      amf:
+        condition: service_healthy
+      upf:
+        condition: service_healthy
+
+  # ── TIER 8: UE (start on-demand: docker compose --profile ue up ue) ────────
+  ue:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ueransim
+      args:
+        COMPONENT: nr-ue
+    image: ueransim-ue:latest
+    container_name: ueransim-ue
+    <<: [*open5gs-common, *small]
+    restart: "no"           # overrides the unless-stopped from *open5gs-common
+    volumes:
+      - ./ueransim-config/nr-ue.yaml:/etc/ueransim/nr-ue.yaml:ro
+      - ./ue-entrypoint.sh:/usr/local/bin/ue-entrypoint.sh:ro
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+    # Custom entrypoint adds default route via uesimtun0 after PDU session setup
+    entrypoint: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
+    depends_on:
+      gnb:
+        condition: service_healthy
+      pcf:
+        condition: service_healthy
+      bsf:
+        condition: service_healthy
+      smf:
+        condition: service_healthy
+    profiles:
+      - ue
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  open5gs:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/24
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mongodb_data:
+    driver: local

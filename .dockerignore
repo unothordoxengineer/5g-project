@@ -1,0 +1,16 @@
+# Exclude macOS build artifacts — the Docker builder compiles from scratch
+open5gs/build/
+open5gs/install/
+
+# Exclude UERANSIM macOS build — Docker builder compiles from scratch
+UERANSIM/build/
+
+# Exclude logs and scripts not needed in containers
+scripts/
+run/
+docs/
+*.log
+
+# macOS junk
+.DS_Store
+**/.DS_Store

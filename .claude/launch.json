@@ -1,0 +1,71 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "NRF (NF Repository Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/nrf/open5gs-nrfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/nrf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "SCP (Service Communication Proxy)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/scp/open5gs-scpd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/scp.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "UDR (Unified Data Repository)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/udr/open5gs-udrd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/udr.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "UDM (Unified Data Management)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/udm/open5gs-udmd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/udm.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "AUSF (Authentication Server Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/ausf/open5gs-ausfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/ausf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "NSSF (Network Slice Selection Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/nssf/open5gs-nssfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/nssf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "BSF (Binding Support Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/bsf/open5gs-bsfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/bsf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "PCF (Policy Control Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/pcf/open5gs-pcfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/pcf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "AMF (Access & Mobility Management Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/amf/open5gs-amfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/amf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "SMF (Session Management Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/smf/open5gs-smfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/smf.yaml"],
+      "port": 7777
+    },
+    {
+      "name": "UPF (User Plane Function)",
+      "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/upf/open5gs-upfd",
+      "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/upf.yaml"],
+      "port": 8805
+    }
+  ]
+}

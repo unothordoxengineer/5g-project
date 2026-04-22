@@ -1,0 +1,23 @@
+logger:
+  level: info
+
+db_uri: mongodb://mongodb/open5gs
+
+global:
+  max:
+    ue: 1024
+
+udr:
+  sbi:
+    server:
+      - address: 0.0.0.0
+        port: 80
+        advertise: udr
+    client:
+      nrf:
+        - uri: http://nrf
+
+time:
+  nf_instance:
+    validity: 86400
+    heartbeat: 60

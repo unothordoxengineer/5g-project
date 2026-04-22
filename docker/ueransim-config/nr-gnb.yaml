@@ -1,0 +1,24 @@
+mcc: '999'
+mnc: '70'
+
+nci: '0x000000010'
+idLength: 32
+tac: 1
+
+# In Docker the container hostname is "gnb":
+# - linkIp/ngapIp bind on all interfaces
+# - gtpIp must resolve to a routable address so UPF can send downlink GTP back;
+#   "gnb" resolves via Docker DNS to the container's eth0 IP
+linkIp: 0.0.0.0
+ngapIp: 0.0.0.0
+gtpIp: gnb
+
+# AMF is reachable by its Docker service name
+amfConfigs:
+  - address: amf
+    port: 38412
+
+slices:
+  - sst: 1
+
+ignoreStreamIds: true
