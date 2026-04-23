@@ -1,0 +1,92 @@
+# =============================================================================
+# UDR — Unified Data Repository (Tier 2)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udr-config
+  namespace: open5gs
+data:
+  udr.yaml: |
+    logger:
+      level: info
+
+    db_uri: mongodb://mongodb/open5gs
+
+    global:
+      max:
+        ue: 1024
+
+    udr:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: udr
+        client:
+          nrf:
+            - uri: http://nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: udr
+  namespace: open5gs
+  labels:
+    app: udr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: udr
+  template:
+    metadata:
+      labels:
+        app: udr
+    spec:
+      containers:
+        - name: udr
+          image: open5gs-udr:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/udr.yaml
+              subPath: udr.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: udr-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: udr
+  namespace: open5gs
+  labels:
+    app: udr
+spec:
+  selector:
+    app: udr
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

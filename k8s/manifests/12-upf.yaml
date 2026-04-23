@@ -1,0 +1,210 @@
+# =============================================================================
+# UPF — User Plane Function (Tier 6)
+#
+# Requires:
+#   - NET_ADMIN + SYS_MODULE capabilities (tun/iptables)
+#   - /dev/net/tun hostPath (kind worker nodes have it via extraMounts)
+#   - Custom entrypoint: waits for ogstun, configures IP + NAT
+#
+# The entrypoint script is stored in a ConfigMap and mounted at runtime.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: upf-config
+  namespace: open5gs
+data:
+  upf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    upf:
+      pfcp:
+        server:
+          - address: 0.0.0.0
+            advertise: upf
+        client:
+      gtpu:
+        server:
+          - address: 0.0.0.0
+            advertise: upf
+      session:
+        - subnet: 10.45.0.0/16
+          gateway: 10.45.0.1
+        - subnet: 2001:db8:cafe::/48
+          gateway: 2001:db8:cafe::1
+      metrics:
+        server:
+          - address: 0.0.0.0
+            port: 9090
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+
+  upf-entrypoint.sh: |
+    #!/bin/sh
+    # UPF entrypoint — start open5gs-upfd then configure ogstun + NAT
+
+    # Start UPF daemon in background
+    /usr/local/bin/open5gs-upfd -c /etc/open5gs/upf.yaml &
+    UPF_PID=$!
+
+    # Wait for ogstun to appear (UPF creates it on startup)
+    echo "[upf-entrypoint] waiting for ogstun..."
+    for i in $(seq 1 30); do
+        ip link show ogstun > /dev/null 2>&1 && break
+        sleep 1
+    done
+
+    # Configure the tun interface
+    ip link set ogstun up
+    ip addr add 10.45.0.1/16 dev ogstun 2>/dev/null || true
+    ip addr add 2001:db8:cafe::1/48 dev ogstun 2>/dev/null || true
+
+    # NAT masquerade so UE packets reach the internet
+    iptables -t nat -A POSTROUTING -s 10.45.0.0/16 ! -o ogstun -j MASQUERADE
+
+    echo "[upf-entrypoint] ogstun configured: $(ip addr show ogstun 2>&1 | grep 'inet ')"
+
+    # Wait for UPF daemon
+    wait $UPF_PID
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upf
+  namespace: open5gs
+  labels:
+    app: upf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upf
+  template:
+    metadata:
+      labels:
+        app: upf
+    spec:
+      containers:
+        - name: upf
+          image: open5gs-upf:latest
+          imagePullPolicy: Never
+          command: ["/bin/sh", "/usr/local/bin/upf-entrypoint.sh"]
+          ports:
+            - containerPort: 8805
+              protocol: UDP
+              name: pfcp
+            - containerPort: 2152
+              protocol: UDP
+              name: gtpu
+            - containerPort: 9090
+              name: metrics
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          securityContext:
+            privileged: true          # NET_ADMIN + SYS_MODULE + iptables
+            capabilities:
+              add: ["NET_ADMIN", "SYS_MODULE"]
+          # Allow ip_forward inside the pod
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-x", "open5gs-upfd"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-x", "open5gs-upfd"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          volumeMounts:
+            - name: upf-config
+              mountPath: /etc/open5gs/upf.yaml
+              subPath: upf.yaml
+            - name: upf-config
+              mountPath: /usr/local/bin/upf-entrypoint.sh
+              subPath: upf-entrypoint.sh
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: upf-config
+          configMap:
+            name: upf-config
+            defaultMode: 0755
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: upf
+  namespace: open5gs
+  labels:
+    app: upf
+spec:
+  selector:
+    app: upf
+  ports:
+    - name: pfcp
+      port: 8805
+      targetPort: 8805
+      protocol: UDP
+    - name: gtpu
+      port: 2152
+      targetPort: 2152
+      protocol: UDP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+---
+# HPA for UPF — scale on CPU utilisation (requires metrics-server)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: upf-hpa
+  namespace: open5gs
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: upf
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

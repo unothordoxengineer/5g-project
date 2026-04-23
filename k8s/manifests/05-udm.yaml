@@ -1,0 +1,90 @@
+# =============================================================================
+# UDM — Unified Data Management (Tier 2)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udm-config
+  namespace: open5gs
+data:
+  udm.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    udm:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: udm
+        client:
+          nrf:
+            - uri: http://nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: udm
+  namespace: open5gs
+  labels:
+    app: udm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: udm
+  template:
+    metadata:
+      labels:
+        app: udm
+    spec:
+      containers:
+        - name: udm
+          image: open5gs-udm:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/udm.yaml
+              subPath: udm.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: udm-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: udm
+  namespace: open5gs
+  labels:
+    app: udm
+spec:
+  selector:
+    app: udm
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

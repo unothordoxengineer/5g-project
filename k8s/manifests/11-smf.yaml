@@ -1,0 +1,131 @@
+# =============================================================================
+# SMF — Session Management Function (Tier 5)
+# Manages PDU sessions; talks to UPF via PFCP (N4 interface).
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smf-config
+  namespace: open5gs
+data:
+  smf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    smf:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: smf
+        client:
+          nrf:
+            - uri: http://nrf
+      pfcp:
+        server:
+          - address: 0.0.0.0
+        client:
+          upf:
+            - address: upf
+      gtpc:
+        server:
+          - address: 0.0.0.0
+      gtpu:
+        server:
+          - address: 0.0.0.0
+      metrics:
+        server:
+          - address: 0.0.0.0
+            port: 9090
+      session:
+        - subnet: 10.45.0.0/16
+          gateway: 10.45.0.1
+        - subnet: 2001:db8:cafe::/48
+          gateway: 2001:db8:cafe::1
+      dns:
+        - 8.8.8.8
+        - 8.8.4.4
+      mtu: 1400
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smf
+  namespace: open5gs
+  labels:
+    app: smf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smf
+  template:
+    metadata:
+      labels:
+        app: smf
+    spec:
+      containers:
+        - name: smf
+          image: open5gs-smf:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+              name: sbi
+            - containerPort: 8805
+              protocol: UDP
+              name: pfcp
+            - containerPort: 9090
+              name: metrics
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/smf.yaml
+              subPath: smf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: smf-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smf
+  namespace: open5gs
+  labels:
+    app: smf
+spec:
+  selector:
+    app: smf
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: pfcp
+      port: 8805
+      targetPort: 8805
+      protocol: UDP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP

@@ -1,0 +1,41 @@
+# =============================================================================
+# kind-config.yaml — Kind cluster for Open5GS 5G SA Core
+#
+# 1 control-plane + 2 workers.
+# Workers get /dev/net/tun from the Docker Desktop VM so UPF and gNB pods
+# can create TUN interfaces inside their containers.
+# Kubelet is configured to allow the net.ipv4.ip_forward unsafe sysctl
+# (used by UPF and UE pods).
+# =============================================================================
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+nodes:
+  # ── Control-plane ──────────────────────────────────────────────────────────
+  - role: control-plane
+
+  # ── Worker 0 ───────────────────────────────────────────────────────────────
+  - role: worker
+    # Expose /dev/net/tun from the Docker Desktop VM into the kind node so
+    # UPF/gNB/UE pods can use hostPath volumes to reach the tun device.
+    extraMounts:
+      - hostPath: /dev/net/tun
+        containerPath: /dev/net/tun
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            allowed-unsafe-sysctls: "net.ipv4.ip_forward,net.ipv6.conf.all.disable_ipv6"
+
+  # ── Worker 1 ───────────────────────────────────────────────────────────────
+  - role: worker
+    extraMounts:
+      - hostPath: /dev/net/tun
+        containerPath: /dev/net/tun
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            allowed-unsafe-sysctls: "net.ipv4.ip_forward,net.ipv6.conf.all.disable_ipv6"

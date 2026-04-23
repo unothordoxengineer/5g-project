@@ -1,0 +1,139 @@
+# =============================================================================
+# gNB — UERANSIM gNodeB (Tier 7)
+#
+# KEY: gtpIp must be the pod's real IP (not a ClusterIP) so UPF can reach
+# the gNB for GTP-U downlink. We use the Kubernetes Downward API to inject
+# the pod IP as $POD_IP, then the entrypoint substitutes it into the config
+# before launching nr-gnb.
+#
+# The gNB Service exposes SCTP 38412 so AMF can find gNB (for callbacks),
+# and UDP 2152 so UPF can send downlink GTP-U frames.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gnb-config
+  namespace: open5gs
+data:
+  nr-gnb.yaml: |
+    mcc: '999'
+    mnc: '70'
+
+    nci: '0x000000010'
+    idLength: 32
+    tac: 1
+
+    # linkIp/ngapIp bind all interfaces.
+    # gtpIp is replaced at runtime by the entrypoint script with the pod's
+    # actual IP (injected via Downward API as $POD_IP).
+    linkIp: 0.0.0.0
+    ngapIp: 0.0.0.0
+    gtpIp: __POD_IP__
+
+    amfConfigs:
+      - address: amf
+        port: 38412
+
+    slices:
+      - sst: 1
+
+    ignoreStreamIds: true
+
+  gnb-entrypoint.sh: |
+    #!/bin/sh
+    # Replace __POD_IP__ placeholder with the actual pod IP from Downward API.
+    # This ensures UPF can reach this pod directly for GTP-U downlink.
+    sed "s/__POD_IP__/${POD_IP}/" /etc/ueransim/nr-gnb.yaml > /tmp/nr-gnb-resolved.yaml
+    echo "[gnb-entrypoint] gtpIp set to ${POD_IP}"
+    exec /usr/local/bin/nr-gnb -c /tmp/nr-gnb-resolved.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gnb
+  namespace: open5gs
+  labels:
+    app: gnb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gnb
+  template:
+    metadata:
+      labels:
+        app: gnb
+    spec:
+      containers:
+        - name: gnb
+          image: ueransim-gnb:latest
+          imagePullPolicy: Never
+          command: ["/bin/sh", "/usr/local/bin/gnb-entrypoint.sh"]
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          ports:
+            - containerPort: 38412
+              protocol: SCTP
+              name: ngap
+            - containerPort: 2152
+              protocol: UDP
+              name: gtpu
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-x", "nr-gnb"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: gnb-config
+              mountPath: /etc/ueransim/nr-gnb.yaml
+              subPath: nr-gnb.yaml
+            - name: gnb-config
+              mountPath: /usr/local/bin/gnb-entrypoint.sh
+              subPath: gnb-entrypoint.sh
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: gnb-config
+          configMap:
+            name: gnb-config
+            defaultMode: 0755
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gnb
+  namespace: open5gs
+  labels:
+    app: gnb
+spec:
+  selector:
+    app: gnb
+  ports:
+    - name: ngap
+      port: 38412
+      targetPort: 38412
+      protocol: SCTP
+    - name: gtpu
+      port: 2152
+      targetPort: 2152
+      protocol: UDP
+    - name: rls
+      port: 4997
+      targetPort: 4997
+      protocol: UDP

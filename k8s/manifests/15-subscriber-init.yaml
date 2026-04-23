@@ -1,0 +1,80 @@
+# =============================================================================
+# Subscriber Init Job
+# Inserts the test subscriber (IMSI 999700000000001) into MongoDB once.
+# Runs after MongoDB is ready; won't re-run on pod restarts (Job semantics).
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subscriber-init
+  namespace: open5gs
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        # Wait for MongoDB to be accepting connections before inserting
+        - name: wait-for-mongo
+          image: mongo:6.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MongoDB..."
+              until mongosh --host mongodb --quiet --eval "db.adminCommand('ping').ok" > /dev/null 2>&1; do
+                sleep 2
+              done
+              echo "MongoDB is ready."
+      containers:
+        - name: insert-subscriber
+          image: mongo:6.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - mongosh
+            - "mongodb://mongodb/open5gs"
+            - "--eval"
+            - |
+              // Idempotent insert — skip if IMSI already exists
+              var imsi = 'imsi-999700000000001';
+              var imsiKey = imsi.replace('imsi-','');
+              if (db.subscribers.countDocuments({imsi: imsiKey}) === 0) {
+                db.subscribers.insertOne({
+                  imsi: imsi.replace('imsi-',''),
+                  msisdn: [],
+                  imeisv: [],
+                  mme_host: [],
+                  mme_realm: [],
+                  purge_flag: [],
+                  security: {
+                    k: '465B5CE8B199B49FAA5F0A2EE238A6BC',
+                    op: null,
+                    opc: 'E8ED289DEBA952E4283B54E88E6183CA',
+                    amf: '8000',
+                    sqn: NumberLong(193)
+                  },
+                  ambr: { downlink: { value: 1, unit: 3 }, uplink: { value: 1, unit: 3 } },
+                  slice: [{
+                    sst: 1,
+                    default_indicator: true,
+                    session: [{
+                      name: 'internet',
+                      type: 3,
+                      qos: { index: 9, arp: { priority_level: 8, pre_emption_capability: 1, pre_emption_vulnerability: 1 } },
+                      ambr: { downlink: { value: 1, unit: 3 }, uplink: { value: 1, unit: 3 } },
+                      ue: { addr: '0.0.0.0' },
+                      _id: new ObjectId()
+                    }],
+                    _id: new ObjectId()
+                  }],
+                  access_restriction_data: 32,
+                  subscriber_status: 0,
+                  operator_determined_barring: 0,
+                  network_access_mode: 0,
+                  __v: 0
+                });
+                print('Subscriber inserted: ' + imsi);
+              } else {
+                print('Subscriber already exists: ' + imsi);
+              }

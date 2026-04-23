@@ -1,0 +1,94 @@
+# =============================================================================
+# NSSF — Network Slice Selection Function (Tier 4)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nssf-config
+  namespace: open5gs
+data:
+  nssf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    nssf:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: nssf
+        client:
+          nrf:
+            - uri: http://nrf
+          nsi:
+            - uri: http://nrf
+              s_nssai:
+                sst: 1
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nssf
+  namespace: open5gs
+  labels:
+    app: nssf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nssf
+  template:
+    metadata:
+      labels:
+        app: nssf
+    spec:
+      containers:
+        - name: nssf
+          image: open5gs-nssf:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/nssf.yaml
+              subPath: nssf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: nssf-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nssf
+  namespace: open5gs
+  labels:
+    app: nssf
+spec:
+  selector:
+    app: nssf
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

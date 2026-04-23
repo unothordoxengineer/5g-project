@@ -1,0 +1,90 @@
+# =============================================================================
+# AUSF — Authentication Server Function (Tier 3)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ausf-config
+  namespace: open5gs
+data:
+  ausf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    ausf:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: ausf
+        client:
+          nrf:
+            - uri: http://nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ausf
+  namespace: open5gs
+  labels:
+    app: ausf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ausf
+  template:
+    metadata:
+      labels:
+        app: ausf
+    spec:
+      containers:
+        - name: ausf
+          image: open5gs-ausf:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/ausf.yaml
+              subPath: ausf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: ausf-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ausf
+  namespace: open5gs
+  labels:
+    app: ausf
+spec:
+  selector:
+    app: ausf
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

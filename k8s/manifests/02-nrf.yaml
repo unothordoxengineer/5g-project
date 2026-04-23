@@ -1,0 +1,110 @@
+# =============================================================================
+# NRF — Network Repository Function (Tier 1)
+# All NFs register here. Must be healthy before other NFs start.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nrf-config
+  namespace: open5gs
+data:
+  nrf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    nrf:
+      serving:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nrf
+  namespace: open5gs
+  labels:
+    app: nrf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nrf
+  template:
+    metadata:
+      labels:
+        app: nrf
+    spec:
+      containers:
+        - name: nrf
+          image: open5gs-nrf:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command:
+                - curl
+                - -sf
+                - --http2-prior-knowledge
+                - --max-time
+                - "3"
+                - http://127.0.0.1/nnrf-nfm/v1/nf-instances
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            exec:
+              command:
+                - curl
+                - -sf
+                - --http2-prior-knowledge
+                - --max-time
+                - "3"
+                - http://127.0.0.1/nnrf-nfm/v1/nf-instances
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/nrf.yaml
+              subPath: nrf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: nrf-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nrf
+  namespace: open5gs
+  labels:
+    app: nrf
+spec:
+  selector:
+    app: nrf
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

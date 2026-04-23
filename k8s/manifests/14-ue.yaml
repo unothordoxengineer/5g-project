@@ -1,0 +1,150 @@
+# =============================================================================
+# UE — UERANSIM simulated UE (Tier 8)
+#
+# Connects to gNB via RLS (UDP 4997). After PDU session is established,
+# the entrypoint adds a default route via uesimtun0 so all UE traffic
+# goes through the 5G data plane.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ue-config
+  namespace: open5gs
+data:
+  nr-ue.yaml: |
+    supi: 'imsi-999700000000001'
+    mcc: '999'
+    mnc: '70'
+    protectionScheme: 0
+    homeNetworkPublicKey: '5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650'
+    homeNetworkPublicKeyId: 1
+    routingIndicator: '0000'
+
+    key: '465B5CE8B199B49FAA5F0A2EE238A6BC'
+    op: 'E8ED289DEBA952E4283B54E88E6183CA'
+    opType: 'OPC'
+    amf: '8000'
+    imei: '356938035643803'
+    imeiSv: '4370816125816151'
+
+    tunNetmask: '255.255.255.0'
+
+    gnbSearchList:
+      - gnb
+
+    uacAic:
+      mps: false
+      mcs: false
+
+    uacAcc:
+      normalClass: 0
+      class11: false
+      class12: false
+      class13: false
+      class14: false
+      class15: false
+
+    sessions:
+      - type: 'IPv4'
+        apn: 'internet'
+        slice:
+          sst: 1
+
+    configured-nssai:
+      - sst: 1
+
+    default-nssai:
+      - sst: 1
+        sd: 1
+
+    integrity:
+      IA1: true
+      IA2: true
+      IA3: true
+
+    ciphering:
+      EA1: true
+      EA2: true
+      EA3: true
+
+    integrityMaxRate:
+      uplink: 'full'
+      downlink: 'full'
+
+  ue-entrypoint.sh: |
+    #!/bin/sh
+    # Start nr-ue, then add default route via uesimtun0 after PDU session.
+    /usr/local/bin/nr-ue -c /etc/ueransim/nr-ue.yaml &
+    UE_PID=$!
+
+    echo "[ue-entrypoint] waiting for uesimtun0..."
+    for i in $(seq 1 30); do
+        ip link show uesimtun0 > /dev/null 2>&1 && break
+        sleep 1
+    done
+
+    if ip link show uesimtun0 > /dev/null 2>&1; then
+        ip route add default dev uesimtun0 metric 50 2>/dev/null || true
+        echo "[ue-entrypoint] default route via uesimtun0 added"
+        ip addr show uesimtun0 | grep 'inet '
+    else
+        echo "[ue-entrypoint] WARNING: uesimtun0 not found after 30s"
+    fi
+
+    wait $UE_PID
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ue
+  namespace: open5gs
+  labels:
+    app: ue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ue
+  template:
+    metadata:
+      labels:
+        app: ue
+    spec:
+      containers:
+        - name: ue
+          image: ueransim-ue:latest
+          imagePullPolicy: Never
+          command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
+          ports: []
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-x", "nr-ue"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          volumeMounts:
+            - name: ue-config
+              mountPath: /etc/ueransim/nr-ue.yaml
+              subPath: nr-ue.yaml
+            - name: ue-config
+              mountPath: /usr/local/bin/ue-entrypoint.sh
+              subPath: ue-entrypoint.sh
+            - name: dev-net-tun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: ue-config
+          configMap:
+            name: ue-config
+            defaultMode: 0755
+        - name: dev-net-tun
+          hostPath:
+            path: /dev/net/tun

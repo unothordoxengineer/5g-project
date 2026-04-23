@@ -1,0 +1,91 @@
+# =============================================================================
+# SCP — Service Communication Proxy (Tier 1)
+# Indirect NRF communication path for all NFs.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scp-config
+  namespace: open5gs
+data:
+  scp.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    scp:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: scp
+        client:
+          nrf:
+            - uri: http://nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scp
+  namespace: open5gs
+  labels:
+    app: scp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scp
+  template:
+    metadata:
+      labels:
+        app: scp
+    spec:
+      containers:
+        - name: scp
+          image: open5gs-scp:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/scp.yaml
+              subPath: scp.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: scp-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scp
+  namespace: open5gs
+  labels:
+    app: scp
+spec:
+  selector:
+    app: scp
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80

@@ -1,0 +1,90 @@
+# =============================================================================
+# BSF — Binding Support Function (Tier 4)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bsf-config
+  namespace: open5gs
+data:
+  bsf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    bsf:
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 80
+            advertise: bsf
+        client:
+          nrf:
+            - uri: http://nrf
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bsf
+  namespace: open5gs
+  labels:
+    app: bsf
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bsf
+  template:
+    metadata:
+      labels:
+        app: bsf
+    spec:
+      containers:
+        - name: bsf
+          image: open5gs-bsf:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/bsf.yaml
+              subPath: bsf.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: bsf-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bsf
+  namespace: open5gs
+  labels:
+    app: bsf
+spec:
+  selector:
+    app: bsf
+  ports:
+    - name: sbi
+      port: 80
+      targetPort: 80
