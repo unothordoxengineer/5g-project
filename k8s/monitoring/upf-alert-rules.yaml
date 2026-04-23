@@ -1,0 +1,49 @@
+# =============================================================================
+# PrometheusRule — UPF alerting rules
+# UPFHighCPU: fires when UPF sum CPU rate > 70% of 500m limit (= 0.35 cores)
+# for 30 seconds
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: open5gs-upf-rules
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: open5gs.upf
+      interval: 15s
+      rules:
+        # UPF CPU: rate > 0.35 cores = 70% of 500m CPU limit
+        # Using sum across all upf pods (HPA distributes load)
+        - alert: UPFHighCPU
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{
+              namespace="open5gs",
+              pod=~"upf-.*",
+              container="upf"
+            }[30s])) > 0.35
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "UPF CPU usage above 70% of limit"
+            description: "UPF total CPU rate is {{ $value | humanizeDuration }}/s (threshold: 0.35 cores = 70% of 500m limit). HPA should scale up."
+
+        # HPA at max replicas
+        - alert: UPFHPAMaxReplicas
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{
+              namespace="open5gs",
+              horizontalpodautoscaler="upf-hpa"
+            } >= kube_horizontalpodautoscaler_spec_max_replicas{
+              namespace="open5gs",
+              horizontalpodautoscaler="upf-hpa"
+            }
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UPF HPA at maximum replicas (5)"
+            description: "UPF HPA has reached its maximum of 5 replicas and cannot scale further."

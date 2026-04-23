@@ -1,0 +1,166 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "UPF GTP throughput: packets/sec and bytes/sec uplink & downlink, gNB counters",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "pps", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "rate(fivegs_ep_n3_gtp_indatapktn3upf[1m])", "legendFormat": "UL pps", "refId": "A" }],
+      "title": "UPF Uplink (N3 IN) pps",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "pps", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "rate(fivegs_ep_n3_gtp_outdatapktn3upf[1m])", "legendFormat": "DL pps", "refId": "A" }],
+      "title": "UPF Downlink (N3 OUT) pps",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "Bps", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "rate(fivegs_ep_n3_gtp_indatavolumeupf_bytes_total[1m])", "legendFormat": "UL Bps", "refId": "A" }],
+      "title": "UPF Uplink Throughput",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "Bps", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "rate(fivegs_ep_n3_gtp_outdatavolumeupf_bytes_total[1m])", "legendFormat": "DL Bps", "refId": "A" }],
+      "title": "UPF Downlink Throughput",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "unit": "pps", "min": 0
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "UPF Uplink (IN)" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "UPF Downlink (OUT)" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(fivegs_ep_n3_gtp_indatapktn3upf[1m])", "legendFormat": "UPF Uplink (IN)", "refId": "A" },
+        { "expr": "rate(fivegs_ep_n3_gtp_outdatapktn3upf[1m])", "legendFormat": "UPF Downlink (OUT)", "refId": "B" }
+      ],
+      "title": "UPF GTP Packets/sec — Uplink & Downlink",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "unit": "Bps", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(fivegs_ep_n3_gtp_indatavolumeupf_bytes_total[1m])", "legendFormat": "UPF Uplink Bytes/s", "refId": "A" },
+        { "expr": "rate(fivegs_ep_n3_gtp_outdatavolumeupf_bytes_total[1m])", "legendFormat": "UPF Downlink Bytes/s", "refId": "B" }
+      ],
+      "title": "UPF GTP Throughput — Bytes/sec",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "fivegs_ep_n3_gtp_indatapktn3upf", "legendFormat": "Total UL Packets", "refId": "A" },
+        { "expr": "fivegs_ep_n3_gtp_outdatapktn3upf", "legendFormat": "Total DL Packets", "refId": "B" }
+      ],
+      "title": "UPF Cumulative Packet Counts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short", "min": 0
+        }, "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(gn_rx_createpdpcontextreq_total[1m])", "legendFormat": "GTPv1C CreatePDP req/s", "refId": "A" },
+        { "expr": "smf_sessions", "legendFormat": "Active SMF Sessions", "refId": "B" }
+      ],
+      "title": "SMF GTP Control Plane",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 38,
+  "tags": ["open5gs", "5g", "upf", "throughput", "gtp"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Open5GS — Throughput (UPF GTP)",
+  "uid": "open5gs-throughput",
+  "version": 1
+}

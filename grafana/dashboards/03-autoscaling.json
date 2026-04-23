@@ -1,0 +1,197 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "enable": true,
+        "expr": "changes(kube_horizontalpodautoscaler_status_current_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}[1m]) > 0",
+        "hide": false,
+        "iconColor": "orange",
+        "name": "HPA Scale Events",
+        "step": "60s",
+        "titleFormat": "HPA Scale",
+        "textFormat": "UPF replicas changed"
+      }
+    ]
+  },
+  "description": "UPF HPA replica count, CPU usage vs 70% threshold, scale events",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 2 }, { "color": "red", "value": 4 }] },
+          "unit": "short", "min": 0, "max": 5
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "orientation": "auto" },
+      "targets": [{ "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Replicas", "refId": "A" }],
+      "title": "UPF Current Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 70 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf-.*\",container=\"upf\"}[1m]))*100", "legendFormat": "UPF CPU%", "refId": "A" }],
+      "title": "UPF CPU % (now)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Min", "refId": "A" }],
+      "title": "HPA Min Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [{ "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Max", "refId": "A" }],
+      "title": "HPA Max Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 70 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "id": 5,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "orientation": "horizontal" },
+      "targets": [{ "expr": "kube_horizontalpodautoscaler_status_target_metric_value{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\",metric_name=\"cpu\"} / 10", "legendFormat": "HPA CPU Target %", "refId": "A" }],
+      "title": "HPA CPU Target Metric",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "unit": "short", "min": 0, "max": 6,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "id": 10,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Current Replicas", "refId": "A" },
+        { "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Min Replicas", "refId": "B" },
+        { "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"open5gs\",horizontalpodautoscaler=\"upf-hpa\"}", "legendFormat": "Max Replicas", "refId": "C" }
+      ],
+      "title": "UPF HPA Replica Count Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "percent", "min": 0, "max": 110
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "70% Threshold" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [10, 10], "fill": "dash" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf-.*\",container=\"upf\"}[1m]))*100", "legendFormat": "UPF CPU %", "refId": "A" },
+        { "expr": "vector(70)", "legendFormat": "70% Threshold", "refId": "B" }
+      ],
+      "title": "UPF CPU % vs 70% HPA Threshold",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "bytes"
+        }, "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"open5gs\",pod=~\"upf-.*\",container=\"upf\"})", "legendFormat": "{{pod}} memory", "refId": "A" }
+      ],
+      "title": "UPF Memory per Replica",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 38,
+  "tags": ["open5gs", "5g", "hpa", "autoscaling"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Open5GS — Autoscaling (UPF HPA)",
+  "uid": "open5gs-autoscaling",
+  "version": 1
+}

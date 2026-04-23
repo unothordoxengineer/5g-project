@@ -1,0 +1,229 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "CPU % and memory usage per pod for all 14 Open5GS NFs",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "CPU Usage",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 10 },
+          "unit": "percent",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"open5gs\", container!=\"\", container!=\"POD\"}[1m])) * 100",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU Usage % — All NFs (1m rate)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "title": "Memory Usage",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 10 },
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "container_memory_working_set_bytes{namespace=\"open5gs\", container!=\"\", container!=\"POD\"}",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Working Set — All NFs",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 102,
+      "title": "Pod Restarts",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1 },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 19 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "kube_pod_container_status_restarts_total{namespace=\"open5gs\"}",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Container Restarts — All NFs",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "id": 103,
+      "title": "Per-NF CPU Breakdown (Stat panels)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 26 },
+      "id": 10,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"amf-.*\",container=\"amf\"}[1m]))*100", "legendFormat": "AMF", "refId": "A" }],
+      "title": "AMF CPU %",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 80 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 26 },
+      "id": 11,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"smf-.*\",container=\"smf\"}[1m]))*100", "legendFormat": "SMF", "refId": "A" }],
+      "title": "SMF CPU %",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 80 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 26 },
+      "id": 12,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf-.*\",container=\"upf\"}[1m]))*100", "legendFormat": "UPF", "refId": "A" }],
+      "title": "UPF CPU %",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 80 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 26 },
+      "id": 13,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"nrf-.*\",container=\"nrf\"}[1m]))*100", "legendFormat": "NRF", "refId": "A" }],
+      "title": "NRF CPU %",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 80 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 26 },
+      "id": 14,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"udr-.*\",container=\"udr\"}[1m]))*100", "legendFormat": "UDR", "refId": "A" }],
+      "title": "UDR CPU %",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 80 }] },
+          "unit": "percent", "min": 0, "max": 100
+        }, "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 26 },
+      "id": 15,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"mongodb-.*\",container=\"mongodb\"}[1m]))*100", "legendFormat": "MongoDB", "refId": "A" }],
+      "title": "MongoDB CPU %",
+      "type": "stat"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 38,
+  "tags": ["open5gs", "5g", "nf"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Open5GS — NF CPU & Memory",
+  "uid": "open5gs-nf-cpu-mem",
+  "version": 1
+}

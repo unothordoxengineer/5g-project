@@ -1,0 +1,87 @@
+# =============================================================================
+# ServiceMonitor CRDs — Prometheus scrape targets for Open5GS NFs
+#
+# AMF, SMF, UPF, PCF expose native /metrics on port 9090.
+# Open5GS returns metrics without a Content-Type header — Prometheus 2.50+
+# requires fallbackScrapeProtocol: PrometheusText0.0.4 to handle this.
+# =============================================================================
+
+# --- AMF ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: amf
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [open5gs]
+  selector:
+    matchLabels:
+      app: amf
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      fallbackScrapeProtocol: PrometheusText0.0.4
+---
+# --- SMF ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: smf
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [open5gs]
+  selector:
+    matchLabels:
+      app: smf
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      fallbackScrapeProtocol: PrometheusText0.0.4
+---
+# --- UPF ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: upf
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [open5gs]
+  selector:
+    matchLabels:
+      app: upf
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      fallbackScrapeProtocol: PrometheusText0.0.4
+---
+# --- PCF ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pcf
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [open5gs]
+  selector:
+    matchLabels:
+      app: pcf
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      fallbackScrapeProtocol: PrometheusText0.0.4

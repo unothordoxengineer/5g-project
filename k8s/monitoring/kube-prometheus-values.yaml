@@ -1,0 +1,76 @@
+# =============================================================================
+# kube-prometheus-stack Helm values for Open5GS Phase 4
+# Prometheus scrapes AMF/SMF/UPF/PCF native /metrics (port 9090)
+# kube-state-metrics covers all other NFs via pod/container metrics
+# =============================================================================
+
+fullnameOverride: prometheus
+
+grafana:
+  enabled: true
+  adminPassword: open5gs
+  service:
+    type: ClusterIP
+    port: 80
+  grafana.ini:
+    server:
+      root_url: http://localhost:3000
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      folder: /var/lib/grafana/dashboards/open5gs
+      searchNamespace: ALL
+  persistence:
+    enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Scrape interval — fine-grained for HPA triggering visibility
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Allow ServiceMonitors from any namespace
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 7d
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 200m
+      limits:
+        memory: 1Gi
+        cpu: 500m
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        memory: 64Mi
+        cpu: 50m
+
+# kube-state-metrics — exposes HPA, pod, container metrics
+kube-state-metrics:
+  enabled: true
+
+# node-exporter — per-node CPU/memory
+nodeExporter:
+  enabled: true
+
+# Disable components not needed in kind
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

@@ -1,0 +1,49 @@
+# =============================================================================
+# Grafana Dashboard ConfigMaps
+# The Grafana sidecar watches for label grafana_dashboard=1 and auto-imports.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-nf-cpu-memory
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  01-nf-cpu-memory.json: |
+    PLACEHOLDER_NF_CPU_MEMORY
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-ue-sessions
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  02-ue-sessions.json: |
+    PLACEHOLDER_UE_SESSIONS
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-autoscaling
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  03-autoscaling.json: |
+    PLACEHOLDER_AUTOSCALING
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-throughput
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  04-throughput.json: |
+    PLACEHOLDER_THROUGHPUT
