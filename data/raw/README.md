@@ -1,6 +1,6 @@
 # Open5GS Phase 4 — Raw Metrics
 
-**Export time range**: 2026-04-23T06:42:51.435110+00:00 → 2026-04-23T07:12:51.435118+00:00
+**Export time range**: 2026-04-23T06:12:44.944304+00:00 → 2026-04-23T14:12:44.944313+00:00
 
 ## CSV Column Descriptions
 
