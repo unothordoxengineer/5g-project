@@ -7,7 +7,7 @@
   ],
   "train_samples": 334,
   "test_samples": 84,
-  "forecast_steps": 84,
+  "forecast_horizon_steps": 84,
   "mape_percent": 3.644060844417761,
   "rmse": 0.09287620061265284,
   "mae": 0.07276359898151813,
