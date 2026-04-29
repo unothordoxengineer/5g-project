@@ -1,0 +1,88 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: closed-loop-sa
+  namespace: open5gs
+
+---
+# RBAC: closed-loop engine needs to scale deployments and read pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: closed-loop-role
+  namespace: open5gs
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: closed-loop-rolebinding
+  namespace: open5gs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: closed-loop-role
+subjects:
+  - kind: ServiceAccount
+    name: closed-loop-sa
+    namespace: open5gs
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: closed-loop-engine
+  namespace: open5gs
+  labels:
+    app: closed-loop-engine
+    phase: "7"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: closed-loop-engine
+  template:
+    metadata:
+      labels:
+        app: closed-loop-engine
+    spec:
+      serviceAccountName: closed-loop-sa
+      containers:
+        - name: closed-loop
+          image: 5g-closed-loop:latest
+          imagePullPolicy: Never
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-kube-prometheus-prometheus.monitoring:9090"
+            - name: SERVING_API_URL
+              value: "http://ml-serving-api.open5gs:80"
+            - name: POLL_INTERVAL_S
+              value: "30"
+            - name: NAMESPACE
+              value: "open5gs"
+            - name: DRY_RUN
+              value: "false"
+            - name: LOG_FILE
+              value: "/logs/closed_loop.log"
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: logs
+          emptyDir: {}
+      restartPolicy: Always
