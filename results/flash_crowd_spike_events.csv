@@ -1,0 +1,6 @@
+rep,spike_start_ts,pre_replicas,hpa_trigger_ts,time_to_hpa_trigger_s,time_to_pod_ready_s,restarts_during_spike,hpa_triggered
+1,2026-04-28T16:35:03.555109+00:00,5,,,,1,False
+2,2026-04-28T16:39:48.011925+00:00,1,2026-04-28T16:40:13.269393+00:00,25.0,,1,True
+3,2026-04-28T16:44:26.269341+00:00,5,,,,1,False
+4,2026-04-28T16:49:03.719405+00:00,5,,,,1,False
+5,2026-04-28T16:53:38.818048+00:00,5,,,,1,False
