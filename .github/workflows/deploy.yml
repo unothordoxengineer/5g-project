@@ -6,15 +6,21 @@ on:
   pull_request:
     branches: [main]
 
+# Top-level permissions — write access needed for log-deployment commit + GHCR push
+permissions:
+  contents: write
+  packages: write
+
 env:
   REGISTRY:      ghcr.io
   IMAGE_SERVING: ghcr.io/${{ github.repository_owner }}/5g-serving-api
   IMAGE_LOOP:    ghcr.io/${{ github.repository_owner }}/5g-closed-loop
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── 1. Lint & unit tests ────────────────────────────────────────────────────
+  # ── 1. Lint & syntax checks ─────────────────────────────────────────────────
   lint-and-test:
-    name: Lint & Smoke Test
+    name: Lint & Syntax Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +29,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install serving dependencies
         run: |
@@ -45,12 +52,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -58,6 +65,63 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Models are not committed to git (binary pkl files).
+      # Create minimal stub models so the Docker COPY models/ step succeeds in CI.
+      # The production image is built locally with real models embedded.
+      - name: Set up Python for stub model generation
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Create stub models for Docker build context
+        run: |
+          pip install --no-cache-dir numpy scikit-learn statsmodels joblib
+          mkdir -p serving/models
+          python3 - <<'PYEOF'
+          import json, joblib, numpy as np, warnings
+          warnings.filterwarnings('ignore')
+          from sklearn.ensemble import IsolationForest
+          from sklearn.preprocessing import StandardScaler
+          from sklearn.cluster import KMeans
+          from sklearn.decomposition import PCA
+          from statsmodels.tsa.arima.model import ARIMA
+
+          d = 'serving/models'
+
+          m = IsolationForest(n_estimators=10, random_state=42).fit(np.zeros((20,3)))
+          sc = StandardScaler().fit(np.zeros((20,3)))
+          joblib.dump(m,  f'{d}/isolation_forest.pkl')
+          joblib.dump(sc, f'{d}/anomaly_scaler.pkl')
+          json.dump({"model":"IsolationForest","threshold":0.6022,
+                     "features":["cpu_upf","upf_replicas","cpu_mongodb"],
+                     "recall":0.903,"fpr":0.034,"precision":0.7,"f1":0.789},
+                    open(f'{d}/anomaly_meta.json','w'))
+
+          km  = KMeans(n_clusters=2, n_init=5, random_state=42).fit(np.zeros((20,5)))
+          sc2 = StandardScaler().fit(np.zeros((20,19)))
+          pca = PCA(n_components=5, random_state=42).fit(np.zeros((20,19)))
+          joblib.dump(km,  f'{d}/kmeans_model.pkl')
+          joblib.dump(sc2, f'{d}/cluster_scaler.pkl')
+          joblib.dump(pca, f'{d}/cluster_pca.pkl')
+          json.dump({"model":"KMeans","k":2,"pca_components":5,
+                     "pca_variance_pct":75.2,"silhouette":0.503,
+                     "features":["cpu_amf","cpu_ausf","cpu_bsf","cpu_gnb","cpu_mongodb",
+                                 "cpu_nrf","cpu_nssf","cpu_pcf","cpu_scp","cpu_smf",
+                                 "cpu_udm","cpu_udr","cpu_ue","cpu_upf","upf_replicas",
+                                 "gtp_in_pps","gtp_out_pps","ran_ue_count","hpa_delta"],
+                     "cluster_states":{"0":"HIGH-LOAD","1":"IDLE"}},
+                    open(f'{d}/clustering_meta.json','w'))
+
+          fit = ARIMA(np.linspace(0,1,40), order=(3,0,1)).fit()
+          joblib.dump(fit, f'{d}/arima_model.pkl')
+          json.dump({"model":"ARIMA","order":[3,0,1],"mape_percent":3.644,
+                     "rmse":0.0929,"mae":0.0728,"train_samples":334,"test_samples":84},
+                    open(f'{d}/arima_meta.json','w'))
+
+          print("Stub models written to serving/models/ — Docker build context ready")
+          PYEOF
 
       - name: Extract metadata — serving API
         id: meta-serving
@@ -69,13 +133,13 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push — serving API
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
-          context: ./serving
-          file:    ./serving/Dockerfile
-          push:    true
-          tags:    ${{ steps.meta-serving.outputs.tags }}
-          labels:  ${{ steps.meta-serving.outputs.labels }}
+          context:    ./serving
+          file:       ./serving/Dockerfile
+          push:       true
+          tags:       ${{ steps.meta-serving.outputs.tags }}
+          labels:     ${{ steps.meta-serving.outputs.labels }}
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
@@ -89,17 +153,17 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push — closed-loop engine
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
-          context: ./automation
-          file:    ./automation/Dockerfile
-          push:    true
-          tags:    ${{ steps.meta-loop.outputs.tags }}
-          labels:  ${{ steps.meta-loop.outputs.labels }}
+          context:    ./automation
+          file:       ./automation/Dockerfile
+          push:       true
+          tags:       ${{ steps.meta-loop.outputs.tags }}
+          labels:     ${{ steps.meta-loop.outputs.labels }}
           cache-from: type=gha
           cache-to:   type=gha,mode=max
 
-  # ── 3. Smoke test — spin up API locally and hit /health ─────────────────────
+  # ── 3. Smoke test — spin up API with stub models and hit all endpoints ───────
   smoke-test:
     name: API Smoke Test
     runs-on: ubuntu-latest
@@ -112,6 +176,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -119,64 +184,70 @@ jobs:
             fastapi uvicorn httpx \
             numpy scikit-learn statsmodels joblib pydantic
 
-      - name: Create stub model files for CI (no real pkl needed for /health)
+      - name: Create stub models for smoke test
         run: |
           mkdir -p /tmp/ci-models
-          python3 - <<'EOF'
-          import json, joblib, numpy as np
+          python3 - <<'PYEOF'
+          import json, joblib, numpy as np, warnings
+          warnings.filterwarnings('ignore')
           from sklearn.ensemble import IsolationForest
           from sklearn.preprocessing import StandardScaler
           from sklearn.cluster import KMeans
           from sklearn.decomposition import PCA
+          from statsmodels.tsa.arima.model import ARIMA
 
-          # Minimal models that load without error
+          d = '/tmp/ci-models'
+
           m = IsolationForest(n_estimators=10, random_state=42).fit(np.zeros((20,3)))
           sc = StandardScaler().fit(np.zeros((20,3)))
-          joblib.dump(m,  '/tmp/ci-models/isolation_forest.pkl')
-          joblib.dump(sc, '/tmp/ci-models/anomaly_scaler.pkl')
-          json.dump({
-            "model":"IsolationForest","threshold":0.6,"features":["cpu_upf","upf_replicas","cpu_mongodb"],
-            "recall":0.9,"fpr":0.03,"precision":0.7,"f1":0.79
-          }, open('/tmp/ci-models/anomaly_meta.json','w'))
+          joblib.dump(m,  f'{d}/isolation_forest.pkl')
+          joblib.dump(sc, f'{d}/anomaly_scaler.pkl')
+          json.dump({"model":"IsolationForest","threshold":0.6022,
+                     "features":["cpu_upf","upf_replicas","cpu_mongodb"],
+                     "recall":0.903,"fpr":0.034,"precision":0.7,"f1":0.789},
+                    open(f'{d}/anomaly_meta.json','w'))
 
-          km = KMeans(n_clusters=2,n_init=5,random_state=42).fit(np.zeros((20,5)))
-          sc2= StandardScaler().fit(np.zeros((20,19)))
-          pca= PCA(n_components=5,random_state=42).fit(np.zeros((20,19)))
-          joblib.dump(km,  '/tmp/ci-models/kmeans_model.pkl')
-          joblib.dump(sc2, '/tmp/ci-models/cluster_scaler.pkl')
-          joblib.dump(pca, '/tmp/ci-models/cluster_pca.pkl')
-          json.dump({
-            "model":"KMeans","k":2,"pca_components":5,"pca_variance_pct":75,"silhouette":0.503,
-            "features":["cpu_amf","cpu_ausf","cpu_bsf","cpu_gnb","cpu_mongodb","cpu_nrf","cpu_nssf",
-                        "cpu_pcf","cpu_scp","cpu_smf","cpu_udm","cpu_udr","cpu_ue","cpu_upf",
-                        "upf_replicas","gtp_in_pps","gtp_out_pps","ran_ue_count","hpa_delta"],
-            "cluster_states":{"0":"HIGH-LOAD","1":"IDLE"}
-          }, open('/tmp/ci-models/clustering_meta.json','w'))
+          km  = KMeans(n_clusters=2, n_init=5, random_state=42).fit(np.zeros((20,5)))
+          sc2 = StandardScaler().fit(np.zeros((20,19)))
+          pca = PCA(n_components=5, random_state=42).fit(np.zeros((20,19)))
+          joblib.dump(km,  f'{d}/kmeans_model.pkl')
+          joblib.dump(sc2, f'{d}/cluster_scaler.pkl')
+          joblib.dump(pca, f'{d}/cluster_pca.pkl')
+          json.dump({"model":"KMeans","k":2,"pca_components":5,
+                     "pca_variance_pct":75.2,"silhouette":0.503,
+                     "features":["cpu_amf","cpu_ausf","cpu_bsf","cpu_gnb","cpu_mongodb",
+                                 "cpu_nrf","cpu_nssf","cpu_pcf","cpu_scp","cpu_smf",
+                                 "cpu_udm","cpu_udr","cpu_ue","cpu_upf","upf_replicas",
+                                 "gtp_in_pps","gtp_out_pps","ran_ue_count","hpa_delta"],
+                     "cluster_states":{"0":"HIGH-LOAD","1":"IDLE"}},
+                    open(f'{d}/clustering_meta.json','w'))
 
-          from statsmodels.tsa.arima.model import ARIMA
-          import warnings; warnings.filterwarnings('ignore')
-          arima_fit = ARIMA(np.linspace(0,1,40), order=(3,0,1)).fit()
-          joblib.dump(arima_fit, '/tmp/ci-models/arima_model.pkl')
-          json.dump({
-            "model":"ARIMA","order":[3,0,1],"mape_percent":3.64,
-            "rmse":0.093,"mae":0.073,"train_samples":334,"test_samples":84
-          }, open('/tmp/ci-models/arima_meta.json','w'))
+          fit = ARIMA(np.linspace(0,1,40), order=(3,0,1)).fit()
+          joblib.dump(fit, f'{d}/arima_model.pkl')
+          json.dump({"model":"ARIMA","order":[3,0,1],"mape_percent":3.644,
+                     "rmse":0.0929,"mae":0.0728,"train_samples":334,"test_samples":84},
+                    open(f'{d}/arima_meta.json','w'))
 
-          print("Stub models created OK")
-          EOF
+          print("Stub models OK")
+          PYEOF
 
-      - name: Start API server (background)
+      - name: Start API server
         run: |
-          MODEL_DIR=/tmp/ci-models uvicorn serving.api:app \
-            --host 127.0.0.1 --port 8000 &
+          cd serving
+          MODEL_DIR=/tmp/ci-models uvicorn api:app --host 127.0.0.1 --port 8000 &
           echo $! > /tmp/uvicorn.pid
-          sleep 8
+          # Poll until ready (max 30 s)
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1 && echo "Server ready after ${i}s" && break
+            sleep 1
+          done
 
       - name: Smoke test — GET /health
         run: |
           curl -sf http://127.0.0.1:8000/health | python3 -m json.tool
-          STATUS=$(curl -s http://127.0.0.1:8000/health | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-          [ "$STATUS" = "ok" ] && echo "HEALTH OK" || (echo "HEALTH FAILED" && exit 1)
+          STATUS=$(curl -s http://127.0.0.1:8000/health \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+          [ "$STATUS" = "ok" ] && echo "✅ HEALTH OK" || (echo "❌ HEALTH FAILED" && exit 1)
 
       - name: Smoke test — POST /predict/anomaly
         run: |
@@ -184,8 +255,17 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"cpu_upf": 95.0, "upf_replicas": 5, "cpu_amf": 40.0}')
           echo "$RESULT" | python3 -m json.tool
-          echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'anomaly_score' in d"
-          echo "ANOMALY ENDPOINT OK"
+          echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'anomaly_score' in d, 'missing anomaly_score'"
+          echo "✅ ANOMALY ENDPOINT OK"
+
+      - name: Smoke test — POST /predict/forecast
+        run: |
+          RESULT=$(curl -sf -X POST http://127.0.0.1:8000/predict/forecast \
+            -H "Content-Type: application/json" \
+            -d '{"sessions": [10, 50, 100, 150, 180, 200]}')
+          echo "$RESULT" | python3 -m json.tool
+          echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'forecast_6h' in d, 'missing forecast_6h'; assert len(d['forecast_6h'])==6"
+          echo "✅ FORECAST ENDPOINT OK"
 
       - name: Smoke test — POST /predict/cluster
         run: |
@@ -193,10 +273,11 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"cpu_upf": 20.0, "cpu_amf": 5.0, "upf_replicas": 1, "ue_count": 10}')
           echo "$RESULT" | python3 -m json.tool
-          echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'cluster_name' in d"
-          echo "CLUSTER ENDPOINT OK"
+          echo "$RESULT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'cluster_name' in d, 'missing cluster_name'"
+          echo "✅ CLUSTER ENDPOINT OK"
 
       - name: Stop API server
+        if: always()
         run: kill $(cat /tmp/uvicorn.pid) 2>/dev/null || true
 
   # ── 4. Log deployment ────────────────────────────────────────────────────────
@@ -211,18 +292,30 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Append deployment log entry
+      - name: Initialise deployment log if missing
         run: |
           mkdir -p docs
-          ENTRY="| $(date -u '+%Y-%m-%d %H:%M UTC') | ${{ github.sha }} | ${{ github.actor }} | ${{ github.event.head_commit.message }} | ✅ Deployed |"
-          echo "$ENTRY" >> docs/deployment_log.md
-          head -5 docs/deployment_log.md || true
-          tail -3 docs/deployment_log.md
+          if [ ! -f docs/deployment_log.md ]; then
+            echo "# Deployment Log" > docs/deployment_log.md
+            echo "" >> docs/deployment_log.md
+            echo "| Date (UTC) | SHA | Actor | Message | Status |" >> docs/deployment_log.md
+            echo "|-----------|-----|-------|---------|--------|" >> docs/deployment_log.md
+          fi
 
-      - name: Commit deployment log
+      - name: Append deployment entry
+        run: |
+          SHA="${{ github.sha }}"
+          SHORT="${SHA:0:7}"
+          MSG=$(echo '${{ github.event.head_commit.message }}' | head -1 | cut -c1-60)
+          ENTRY="| $(date -u '+%Y-%m-%d %H:%M') | \`${SHORT}\` | ${{ github.actor }} | ${MSG} | ✅ |"
+          echo "$ENTRY" >> docs/deployment_log.md
+          tail -5 docs/deployment_log.md
+
+      - name: Commit and push deployment log
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/deployment_log.md
-          git diff --cached --quiet || git commit -m "ci: log deployment $(date -u '+%Y-%m-%dT%H:%MZ') [skip ci]"
+          git diff --cached --quiet || \
+            git commit -m "ci: deployment log $(date -u '+%Y-%m-%dT%H:%MZ') [skip ci]"
           git push
