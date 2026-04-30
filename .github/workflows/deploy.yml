@@ -15,7 +15,6 @@ env:
   REGISTRY:      ghcr.io
   IMAGE_SERVING: ghcr.io/${{ github.repository_owner }}/5g-serving-api
   IMAGE_LOOP:    ghcr.io/${{ github.repository_owner }}/5g-closed-loop
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ── 1. Lint & syntax checks ─────────────────────────────────────────────────
@@ -135,13 +134,11 @@ jobs:
       - name: Build and push — serving API
         uses: docker/build-push-action@v6
         with:
-          context:    ./serving
-          file:       ./serving/Dockerfile
-          push:       true
-          tags:       ${{ steps.meta-serving.outputs.tags }}
-          labels:     ${{ steps.meta-serving.outputs.labels }}
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
+          context: ./serving
+          file:    ./serving/Dockerfile
+          push:    true
+          tags:    ${{ steps.meta-serving.outputs.tags }}
+          labels:  ${{ steps.meta-serving.outputs.labels }}
 
       - name: Extract metadata — closed-loop
         id: meta-loop
@@ -155,13 +152,11 @@ jobs:
       - name: Build and push — closed-loop engine
         uses: docker/build-push-action@v6
         with:
-          context:    ./automation
-          file:       ./automation/Dockerfile
-          push:       true
-          tags:       ${{ steps.meta-loop.outputs.tags }}
-          labels:     ${{ steps.meta-loop.outputs.labels }}
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
+          context: ./automation
+          file:    ./automation/Dockerfile
+          push:    true
+          tags:    ${{ steps.meta-loop.outputs.tags }}
+          labels:  ${{ steps.meta-loop.outputs.labels }}
 
   # ── 3. Smoke test — spin up API with stub models and hit all endpoints ───────
   smoke-test:
