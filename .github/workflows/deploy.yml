@@ -45,7 +45,7 @@ jobs:
       - name: Syntax check — analyze_phase6.py
         run: python -m py_compile scripts/analyze_phase6.py && echo "analyze_phase6.py OK"
 
-  # ── 2. Build & push Docker images ───────────────────────────────────────────
+  # ── 2. Build Docker images (no push — registry credentials not yet configured) ─
   build-and-push:
     name: Build Docker Images
     runs-on: ubuntu-latest
@@ -55,26 +55,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Models are not committed to git (binary pkl files).
-      # Create minimal stub models so the Docker COPY models/ step succeeds in CI.
-      # The production image is built locally with real models embedded.
       - name: Set up Python for stub model generation
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
-      - name: Create stub models for Docker build context
+      # serving/models/ is not committed (binary pkl files).
+      # Generate stub models so COPY models/ in the Dockerfile succeeds.
+      - name: Generate stub models for build context
         run: |
           pip install --no-cache-dir numpy scikit-learn statsmodels joblib
           mkdir -p serving/models
@@ -88,8 +77,7 @@ jobs:
           from statsmodels.tsa.arima.model import ARIMA
 
           d = 'serving/models'
-
-          m = IsolationForest(n_estimators=10, random_state=42).fit(np.zeros((20,3)))
+          m  = IsolationForest(n_estimators=10, random_state=42).fit(np.zeros((20,3)))
           sc = StandardScaler().fit(np.zeros((20,3)))
           joblib.dump(m,  f'{d}/isolation_forest.pkl')
           joblib.dump(sc, f'{d}/anomaly_scaler.pkl')
@@ -97,7 +85,6 @@ jobs:
                      "features":["cpu_upf","upf_replicas","cpu_mongodb"],
                      "recall":0.903,"fpr":0.034,"precision":0.7,"f1":0.789},
                     open(f'{d}/anomaly_meta.json','w'))
-
           km  = KMeans(n_clusters=2, n_init=5, random_state=42).fit(np.zeros((20,5)))
           sc2 = StandardScaler().fit(np.zeros((20,19)))
           pca = PCA(n_components=5, random_state=42).fit(np.zeros((20,19)))
@@ -112,51 +99,35 @@ jobs:
                                  "gtp_in_pps","gtp_out_pps","ran_ue_count","hpa_delta"],
                      "cluster_states":{"0":"HIGH-LOAD","1":"IDLE"}},
                     open(f'{d}/clustering_meta.json','w'))
-
           fit = ARIMA(np.linspace(0,1,40), order=(3,0,1)).fit()
           joblib.dump(fit, f'{d}/arima_model.pkl')
           json.dump({"model":"ARIMA","order":[3,0,1],"mape_percent":3.644,
                      "rmse":0.0929,"mae":0.0728,"train_samples":334,"test_samples":84},
                     open(f'{d}/arima_meta.json','w'))
-
-          print("Stub models written to serving/models/ — Docker build context ready")
+          print("Stub models OK")
           PYEOF
 
-      - name: Extract metadata — serving API
-        id: meta-serving
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_SERVING }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+      # Plain docker build — no buildx, no cache, no push.
+      # Push to GHCR will be enabled in Phase 8 when AWS/registry credentials are set.
+      - name: Build serving API image
+        run: |
+          docker build \
+            -t 5g-serving-api:ci-${{ github.sha }} \
+            -f serving/Dockerfile \
+            ./serving
+          echo "✅ 5g-serving-api built successfully"
 
-      - name: Build and push — serving API
-        uses: docker/build-push-action@v6
-        with:
-          context: ./serving
-          file:    ./serving/Dockerfile
-          push:    true
-          tags:    ${{ steps.meta-serving.outputs.tags }}
-          labels:  ${{ steps.meta-serving.outputs.labels }}
+      - name: Build closed-loop engine image
+        run: |
+          docker build \
+            -t 5g-closed-loop:ci-${{ github.sha }} \
+            -f automation/Dockerfile \
+            ./automation
+          echo "✅ 5g-closed-loop built successfully"
 
-      - name: Extract metadata — closed-loop
-        id: meta-loop
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_LOOP }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push — closed-loop engine
-        uses: docker/build-push-action@v6
-        with:
-          context: ./automation
-          file:    ./automation/Dockerfile
-          push:    true
-          tags:    ${{ steps.meta-loop.outputs.tags }}
-          labels:  ${{ steps.meta-loop.outputs.labels }}
+      - name: Verify images exist
+        run: |
+          docker images | grep -E "5g-serving-api|5g-closed-loop"
 
   # ── 3. Smoke test — spin up API with stub models and hit all endpoints ───────
   smoke-test:
@@ -310,7 +281,9 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git add docs/deployment_log.md
           git diff --cached --quiet || \
             git commit -m "ci: deployment log $(date -u '+%Y-%m-%dT%H:%MZ') [skip ci]"
-          git push
+          git push origin HEAD:main
