@@ -19,6 +19,8 @@ amfConfigs:
     port: 38412
 
 slices:
-  - sst: 1
+  - sst: 1    # eMBB  — Enhanced Mobile Broadband
+  - sst: 2    # mMTC  — Massive Machine-Type Communications
+  - sst: 3    # URLLC — Ultra-Reliable Low-Latency Communications
 
 ignoreStreamIds: true

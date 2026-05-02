@@ -31,15 +31,23 @@ uacAcc:
   class14: false
   class15: false
 
+# PDU session — defaults to eMBB (SST=1, DNN=internet).
+# To connect via a different slice, change sst and apn:
+#   mMTC  → sst: 2, apn: 'iot'
+#   URLLC → sst: 3, apn: 'urllc'
 sessions:
   - type: 'IPv4'
     apn: 'internet'
     slice:
-      sst: 1
+      sst: 1    # eMBB — default slice
 
+# All three slices that this UE is configured to use
 configured-nssai:
-  - sst: 1
+  - sst: 1    # eMBB
+  - sst: 2    # mMTC
+  - sst: 3    # URLLC
 
+# Default slice used when no explicit request is made: eMBB
 default-nssai:
   - sst: 1
     sd: 1

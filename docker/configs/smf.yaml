@@ -31,10 +31,32 @@ smf:
       - address: 0.0.0.0
         port: 9090
   session:
+    # ── Slice 1: eMBB — Enhanced Mobile Broadband ──────────────────────────
+    # DNN: internet | SST=1 | UE AMBR: 100 Mbps DL / 50 Mbps UL
+    # 5QI=9 (Non-GBR, PDB=300ms) — smartphones, video streaming
     - subnet: 10.45.0.0/16
       gateway: 10.45.0.1
+      dnn: internet
+
+    # ── Slice 2: mMTC — Massive IoT ───────────────────────────────────────
+    # DNN: iot | SST=2 | UE AMBR: 1 Mbps DL / 1 Mbps UL
+    # 5QI=9 (Non-GBR, low ARP priority 15) — sensors, meters, low-power devices
+    - subnet: 10.46.0.0/16
+      gateway: 10.46.0.1
+      dnn: iot
+
+    # ── Slice 3: URLLC — Ultra-Reliable Low Latency ───────────────────────
+    # DNN: urllc | SST=3 | UE AMBR: 10 Mbps DL / 5 Mbps UL
+    # 5QI=1 (GBR, PDB=100ms, PER=1e-2) — industrial automation, V2X
+    - subnet: 10.47.0.0/16
+      gateway: 10.47.0.1
+      dnn: urllc
+
+    # ── IPv6 pool for eMBB ─────────────────────────────────────────────────
     - subnet: 2001:db8:cafe::/48
       gateway: 2001:db8:cafe::1
+      dnn: internet
+
   dns:
     - 8.8.8.8
     - 8.8.4.4

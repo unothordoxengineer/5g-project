@@ -50,8 +50,15 @@ data:
         slice:
           sst: 1
 
+    # PDU session — defaults to eMBB (SST=1, DNN=internet).
+    # To connect via a different slice, change sst and apn:
+    #   mMTC  → sst: 2, apn: 'iot'
+    #   URLLC → sst: 3, apn: 'urllc'
+
     configured-nssai:
-      - sst: 1
+      - sst: 1    # eMBB
+      - sst: 2    # mMTC
+      - sst: 3    # URLLC
 
     default-nssai:
       - sst: 1

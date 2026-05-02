@@ -54,20 +54,58 @@ spec:
                     amf: '8000',
                     sqn: NumberLong(193)
                   },
-                  ambr: { downlink: { value: 1, unit: 3 }, uplink: { value: 1, unit: 3 } },
-                  slice: [{
-                    sst: 1,
-                    default_indicator: true,
-                    session: [{
-                      name: 'internet',
-                      type: 3,
-                      qos: { index: 9, arp: { priority_level: 8, pre_emption_capability: 1, pre_emption_vulnerability: 1 } },
-                      ambr: { downlink: { value: 1, unit: 3 }, uplink: { value: 1, unit: 3 } },
-                      ue: { addr: '0.0.0.0' },
+                  // UE aggregate AMBR (eMBB ceiling: 100 Mbps DL / 50 Mbps UL)
+                  ambr: { downlink: { value: 100, unit: 2 }, uplink: { value: 50, unit: 2 } },
+                  slice: [
+                    // ── Slice 1: eMBB — Enhanced Mobile Broadband ──────────
+                    // DNN: internet | SST=1 | 5QI=9 (Non-GBR, PDB=300ms)
+                    // Use-cases: smartphone data, video streaming
+                    {
+                      sst: 1,
+                      default_indicator: true,
+                      session: [{
+                        name: 'internet',
+                        type: 3,
+                        qos: { index: 9, arp: { priority_level: 8, pre_emption_capability: 1, pre_emption_vulnerability: 1 } },
+                        ambr: { downlink: { value: 100, unit: 2 }, uplink: { value: 50, unit: 2 } },
+                        ue: { addr: '0.0.0.0' },
+                        _id: new ObjectId()
+                      }],
                       _id: new ObjectId()
-                    }],
-                    _id: new ObjectId()
-                  }],
+                    },
+                    // ── Slice 2: mMTC — Massive Machine-Type Communications ─
+                    // DNN: iot | SST=2 | 5QI=9 (Non-GBR, low ARP priority 15)
+                    // Use-cases: smart meters, sensors, low-power IoT devices
+                    {
+                      sst: 2,
+                      default_indicator: false,
+                      session: [{
+                        name: 'iot',
+                        type: 3,
+                        qos: { index: 9, arp: { priority_level: 15, pre_emption_capability: 1, pre_emption_vulnerability: 1 } },
+                        ambr: { downlink: { value: 1, unit: 2 }, uplink: { value: 1, unit: 2 } },
+                        ue: { addr: '0.0.0.0' },
+                        _id: new ObjectId()
+                      }],
+                      _id: new ObjectId()
+                    },
+                    // ── Slice 3: URLLC — Ultra-Reliable Low-Latency ─────────
+                    // DNN: urllc | SST=3 | 5QI=1 (GBR, PDB=100ms, PER=1e-2)
+                    // Use-cases: industrial automation, V2X, remote surgery
+                    {
+                      sst: 3,
+                      default_indicator: false,
+                      session: [{
+                        name: 'urllc',
+                        type: 3,
+                        qos: { index: 1, arp: { priority_level: 1, pre_emption_capability: 2, pre_emption_vulnerability: 2 } },
+                        ambr: { downlink: { value: 10, unit: 2 }, uplink: { value: 5, unit: 2 } },
+                        ue: { addr: '0.0.0.0' },
+                        _id: new ObjectId()
+                      }],
+                      _id: new ObjectId()
+                    }
+                  ],
                   access_restriction_data: 32,
                   subscriber_status: 0,
                   operator_determined_barring: 0,

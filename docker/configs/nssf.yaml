@@ -15,9 +15,26 @@ nssf:
       nrf:
         - uri: http://nrf
       nsi:
+        # Slice 1 — eMBB: Enhanced Mobile Broadband
+        # DNN: internet  |  UE AMBR: 100 Mbps DL / 50 Mbps UL
+        # Use-cases: smartphone data, video streaming, mobile broadband
         - uri: http://nrf
           s_nssai:
             sst: 1
+
+        # Slice 2 — mMTC: Massive Machine-Type Communications (IoT)
+        # DNN: iot  |  UE AMBR: 1 Mbps DL / 1 Mbps UL
+        # Use-cases: smart meters, sensors, low-power IoT devices
+        - uri: http://nrf
+          s_nssai:
+            sst: 2
+
+        # Slice 3 — URLLC: Ultra-Reliable Low-Latency Communications
+        # DNN: urllc  |  UE AMBR: 10 Mbps DL / 5 Mbps UL
+        # Use-cases: industrial automation, V2X, remote surgery
+        - uri: http://nrf
+          s_nssai:
+            sst: 3
 
 time:
   nf_instance:
