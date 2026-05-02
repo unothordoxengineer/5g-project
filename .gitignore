@@ -1,3 +1,6 @@
 open5gs/
 .DS_Store
 build/
+__pycache__/
+serving/__pycache__/
+*.pyc
