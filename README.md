@@ -46,11 +46,13 @@ All Phase 5 and Phase 6 performance targets were met or exceeded:
 | Anomaly Detection False Positive Rate | < 15% | **3.1%** | ✅ |
 | Traffic Forecast MAPE (84-step) | < 15% | **3.64%** | ✅ |
 | Workload Clustering Silhouette Score | > 0.5 | **0.503** | ✅ |
-| End-to-End Ping (UE → Internet) | pass | **0% loss, 2.14 ms RTT** | ✅ |
+| End-to-End Ping (UE → Internet)² | pass | **0% loss, 2.14 ms RTT** | ✅ |
 | Latency p99 (steady-state, 150 UE)¹ | < 20 ms | **6.9 ms** | ✅ |
 | Pod Restarts (sustained load) | 0 | **0** | ✅ |
 
 > ¹ p99 measured during steady-state. Peak p99 of 102 ms observed during autoscaling transition (new UPF pods initialising) — expected behaviour that resolves within one HPA stabilisation window.
+>
+> ² GTP-U data plane validated inside Docker Linux containers (Ubuntu 22.04) where the kernel `gtp` module is available. Native macOS does not support kernel GTP-U; Docker provides an identical environment to production EKS deployment. Full validation details: [`docs/data_plane_validation.md`](docs/data_plane_validation.md).
 
 ---
 
@@ -422,6 +424,7 @@ The GitHub Actions pipeline runs on every push to `main` and every pull request:
 | Document | Location | Contents |
 |----------|----------|----------|
 | Project Status Dashboard | `docs/project_status.md` | Phase progress, metric targets vs actuals, deliverables checklist |
+| Data Plane Validation | `docs/data_plane_validation.md` | GTP-U tunnel proof, ping 0% loss 2.14 ms, HTTP curl, macOS platform note |
 | ML Model Evaluation Report | `ml/model_evaluation.md` | Detailed methodology, hyperparameter choices, evaluation results |
 | Stress Test Benchmark Report | `results/benchmark_report.md` | Phase 6 scenario analysis, HPA timing, ML inference overlay |
 | Environment Setup Guide | `docs/environment.md` | macOS M1 setup, known issues, workarounds |
