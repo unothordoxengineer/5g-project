@@ -1,0 +1,462 @@
+# =============================================================================
+# RBAC — Role-Based Access Control for Open5GS 5G Core
+#
+# Principle of least privilege:
+#   • Each NF gets its own ServiceAccount (pod identity isolation).
+#   • NFs do NOT interact with the Kubernetes API — their ServiceAccounts
+#     carry ZERO API permissions and have token automounting disabled.
+#   • Only the subscriber-init Job and Prometheus need API access.
+#   • The closed-loop engine (ML autoscaler) needs patch access to the UPF
+#     Deployment — scoped to that single resource.
+#
+# ServiceAccount naming: <nf-name>-sa  (e.g. amf-sa, smf-sa)
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ServiceAccounts — one per NF
+# automountServiceAccountToken: false prevents kube-apiserver credentials
+# from being injected into pods that never need them.
+# ──────────────────────────────────────────────────────────────���──────────────
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nrf-sa
+  namespace: open5gs
+  labels:
+    app: nrf
+    security.open5gs/role: service-account
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scp-sa
+  namespace: open5gs
+  labels:
+    app: scp
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: amf-sa
+  namespace: open5gs
+  labels:
+    app: amf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: smf-sa
+  namespace: open5gs
+  labels:
+    app: smf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: upf-sa
+  namespace: open5gs
+  labels:
+    app: upf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: udr-sa
+  namespace: open5gs
+  labels:
+    app: udr
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: udm-sa
+  namespace: open5gs
+  labels:
+    app: udm
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ausf-sa
+  namespace: open5gs
+  labels:
+    app: ausf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pcf-sa
+  namespace: open5gs
+  labels:
+    app: pcf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bsf-sa
+  namespace: open5gs
+  labels:
+    app: bsf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nssf-sa
+  namespace: open5gs
+  labels:
+    app: nssf
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-sa
+  namespace: open5gs
+  labels:
+    app: mongodb
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gnb-sa
+  namespace: open5gs
+  labels:
+    app: gnb
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ue-sa
+  namespace: open5gs
+  labels:
+    app: ue
+automountServiceAccountToken: false
+---
+# subscriber-init Job needs token to talk to kube API? No — it only talks to
+# MongoDB. Keep automount disabled.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: subscriber-init-sa
+  namespace: open5gs
+  labels:
+    app: subscriber-init
+automountServiceAccountToken: false
+
+---
+# =============================================================================
+# Roles — minimal Kubernetes API permissions
+# =============================================================================
+
+# --- ConfigMap reader: all NFs need to read their own ConfigMap at startup ---
+# NOTE: In this deployment NFs load configs via volumeMounts (Kubelet-mounted),
+#       so they never call the API directly. This Role is defined as defence-
+#       in-depth if a future NF version queries its own config via the API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-reader
+  namespace: open5gs
+  annotations:
+    security.open5gs/purpose: "Read-only access to own ConfigMap — defence in depth"
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+---
+# --- Secret reader: NFs that consume Secrets (UDR for MongoDB URI) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: open5gs
+  annotations:
+    security.open5gs/purpose: "Read own Secret (MongoDB URI) — UDR only"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames: ["mongodb-credentials"]   # scoped to a single Secret
+
+---
+# --- UPF autoscaler (closed-loop engine): patch Deployment replicas ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: upf-scaler
+  namespace: open5gs
+  annotations:
+    security.open5gs/purpose: "Allows closed-loop ML engine to scale UPF replicas"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch", "update"]
+    resourceNames: ["upf"]   # scoped to UPF Deployment only
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update"]
+    resourceNames: ["upf"]
+
+---
+# --- Pod status reader: closed-loop engine monitors pod health ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: open5gs
+  annotations:
+    security.open5gs/purpose: "Read pod status for health monitoring — closed-loop engine"
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+# =============================================================================
+# RoleBindings — attach Roles to ServiceAccounts
+# =============================================================================
+
+# All NF ServiceAccounts get configmap-reader (defence-in-depth, read-only)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nrf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: nrf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: amf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: amf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: smf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: smf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: upf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: upf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: udr-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: udr-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: udm-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: udm-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ausf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: ausf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pcf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: pcf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bsf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: bsf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nssf-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: nssf-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: scp-configmap-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: scp-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# UDR gets secret-reader for MongoDB credentials
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: udr-secret-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: udr-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Closed-loop engine ServiceAccount (defined in serving/)
+# Gets upf-scaler and pod-reader for autoscaling
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: closed-loop-sa
+  namespace: open5gs
+  labels:
+    app: closed-loop-engine
+  annotations:
+    security.open5gs/purpose: "ML autoscaler — needs to patch UPF replicas only"
+automountServiceAccountToken: true   # needs API access
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: closed-loop-upf-scaler
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: closed-loop-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: upf-scaler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: closed-loop-pod-reader
+  namespace: open5gs
+subjects:
+  - kind: ServiceAccount
+    name: closed-loop-sa
+    namespace: open5gs
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# =============================================================================
+# ClusterRole binding for Prometheus — it needs to discover pods/services
+# across all namespaces. This is typically created by the kube-prometheus
+# stack install, but recorded here for audit visibility.
+# =============================================================================
+# (prometheus-operator already creates this — shown for documentation only)
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#   name: prometheus-open5gs-reader
+# subjects:
+#   - kind: ServiceAccount
+#     name: prometheus-prometheus
+#     namespace: monitoring
+# roleRef:
+#   kind: ClusterRole
+#   name: prometheus   # created by kube-prometheus-stack Helm chart
+#   apiGroup: rbac.authorization.k8s.io

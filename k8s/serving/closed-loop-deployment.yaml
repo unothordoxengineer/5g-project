@@ -6,16 +6,25 @@ metadata:
   namespace: open5gs
 
 ---
-# RBAC: closed-loop engine needs to scale deployments and read pods
+# RBAC: closed-loop engine may only scale the UPF deployment (resourceNames scoped)
+# Tightened by security hardening — Phase 8 (k8s/security/rbac.yaml)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: closed-loop-role
   namespace: open5gs
+  annotations:
+    security.open5gs/last-reviewed: "2026-05-02"
+    security.open5gs/reason: "Scoped to upf only — closed-loop engine must not patch other NF deployments"
 rules:
   - apiGroups: ["apps"]
-    resources: ["deployments", "deployments/scale"]
+    resources: ["deployments"]
     verbs: ["get", "list", "patch", "update"]
+    resourceNames: ["upf"]   # scoped: cannot patch smf, amf, or any other NF
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update"]
+    resourceNames: ["upf"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]

@@ -1,0 +1,865 @@
+# =============================================================================
+# NetworkPolicies — Open5GS 5G Core Security Hardening
+#
+# IMPORTANT — CNI enforcement note:
+#   This cluster uses kindnet, which does NOT enforce NetworkPolicy rules.
+#   The policies below are valid Kubernetes objects and are stored in etcd.
+#   To enforce them, replace kindnet with Calico or Cilium:
+#     kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+#   (requires cluster recreation with `networking: { disableDefaultCNI: true }`
+#    in kind-config.yaml)
+#
+# Port reference (K8s-internal, differs from Docker external mapping):
+#   SBI (HTTP/2)  → port 80   (NRF external: NodePort 7777 is a Docker alias)
+#   PFCP          → port 8805 UDP
+#   NGAP          → port 38412 SCTP
+#   GTP-U         → port 2152 UDP
+#   MongoDB       → port 27017 TCP
+#   Metrics       → port 9090 TCP
+#   DNS (kube-dns)→ port 53 UDP/TCP
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. DEFAULT DENY — drop all ingress and egress in open5gs namespace
+#    Rationale: zero-trust baseline; explicit rules must permit each flow.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "Zero-trust baseline — all traffic denied unless explicitly permitted"
+spec:
+  podSelector: {}       # matches every pod in the namespace
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# -----------------------------------------------------------------------------
+# 2. DNS EGRESS — all pods need kube-dns for service-name resolution
+#    Rationale: without DNS every NF fails to resolve 'nrf', 'amf', etc.
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "Permit DNS to kube-dns so NFs resolve each other by service name"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# =============================================================================
+# NRF — Network Repository Function
+# All NFs must register with and query NRF (SBI port 80).
+# =============================================================================
+
+# --- NRF ingress: accept SBI from every NF in namespace ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nrf-ingress-sbi
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "Every NF must reach NRF for registration, heartbeat, and discovery"
+spec:
+  podSelector:
+    matchLabels:
+      app: nrf
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}   # any pod in open5gs namespace
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# --- NRF egress: push notifications to all NFs (callbacks on port 80) ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nrf-egress-callbacks
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "NRF pushes NF-registration events to subscribers via SBI callbacks"
+spec:
+  podSelector:
+    matchLabels:
+      app: nrf
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# SCP — Service Communication Proxy
+# Acts as SBI message broker between NFs.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scp
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "SCP proxies SBI messages between NFs; must accept from and reach all NFs"
+spec:
+  podSelector:
+    matchLabels:
+      app: scp
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# AMF — Access and Mobility Management Function
+#
+# Ingress:  gNB (NGAP/SCTP 38412), Prometheus scraping (9090)
+# Egress:   NRF (register/discover), AUSF (authentication), UDM (subscriber data),
+#           PCF (policy), SMF (PDU session), NSSF (slice selection), SCP (proxy)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-amf-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "AMF accepts NGAP from gNB and Prometheus scrapes"
+spec:
+  podSelector:
+    matchLabels:
+      app: amf
+  policyTypes:
+    - Ingress
+  ingress:
+    # gNB → AMF: NGAP (N2 interface, SCTP)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gnb
+      ports:
+        - port: 38412
+          protocol: SCTP
+    # Prometheus → AMF: metrics scrape
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+    # SBI callbacks from NRF/SCP/SMF
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+        - podSelector:
+            matchLabels:
+              app: smf
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-amf-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "AMF talks to NRF, AUSF, UDM, PCF, SMF, NSSF, SCP — no other NFs"
+spec:
+  podSelector:
+    matchLabels:
+      app: amf
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: ausf
+        - podSelector:
+            matchLabels:
+              app: udm
+        - podSelector:
+            matchLabels:
+              app: pcf
+        - podSelector:
+            matchLabels:
+              app: smf
+        - podSelector:
+            matchLabels:
+              app: nssf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# SMF — Session Management Function
+#
+# Ingress:  AMF (SBI), UPF (PFCP responses), Prometheus (9090)
+# Egress:   NRF, PCF (session policy), UDM (subscriber data),
+#           UPF (PFCP N4 interface), SCP
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-smf-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "SMF accepts PDU session requests from AMF, PFCP responses from UPF"
+spec:
+  podSelector:
+    matchLabels:
+      app: smf
+  policyTypes:
+    - Ingress
+  ingress:
+    # AMF, NRF callbacks, SCP → SMF: SBI
+    - from:
+        - podSelector:
+            matchLabels:
+              app: amf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+    # UPF → SMF: PFCP session responses (N4)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: upf
+      ports:
+        - port: 8805
+          protocol: UDP
+    # Prometheus scrape
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-smf-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "SMF talks to NRF, PCF, UDM (policy+data), UPF (PFCP N4) — nothing else"
+spec:
+  podSelector:
+    matchLabels:
+      app: smf
+  policyTypes:
+    - Egress
+  egress:
+    # SMF → NRF, PCF, UDM, SCP: SBI
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: pcf
+        - podSelector:
+            matchLabels:
+              app: udm
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+    # SMF → UPF: PFCP (N4 interface, UDP)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: upf
+      ports:
+        - port: 8805
+          protocol: UDP
+
+---
+# =============================================================================
+# UPF — User Plane Function
+#
+# Ingress:  SMF (PFCP), gNB (GTP-U N3 interface), Prometheus (9090)
+# Egress:   SMF (PFCP responses), external internet (N6 — UE data plane)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-upf-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "UPF accepts PFCP from SMF and GTP-U from gNB; no SBI needed"
+spec:
+  podSelector:
+    matchLabels:
+      app: upf
+  policyTypes:
+    - Ingress
+  ingress:
+    # SMF → UPF: PFCP session establishment (N4)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: smf
+      ports:
+        - port: 8805
+          protocol: UDP
+    # gNB → UPF: GTP-U encapsulated user traffic (N3)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gnb
+      ports:
+        - port: 2152
+          protocol: UDP
+    # Prometheus scrape
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-upf-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "UPF sends PFCP to SMF and forwards UE IP traffic to internet (N6)"
+spec:
+  podSelector:
+    matchLabels:
+      app: upf
+  policyTypes:
+    - Egress
+  egress:
+    # UPF → SMF: PFCP responses
+    - to:
+        - podSelector:
+            matchLabels:
+              app: smf
+      ports:
+        - port: 8805
+          protocol: UDP
+    # UPF → internet: N6 data plane (UE traffic egress — all ports/protocols)
+    # Restricted to non-RFC1918 destinations; NAT masquerade handles the rest.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+
+---
+# =============================================================================
+# MongoDB
+#
+# Ingress:  UDR only (subscriber data reads/writes)
+# Egress:   none (server-only role)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mongodb-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "MongoDB holds subscriber PII — only UDR may access it, no direct NF access"
+spec:
+  podSelector:
+    matchLabels:
+      app: mongodb
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # UDR → MongoDB: subscriber CRUD
+    - from:
+        - podSelector:
+            matchLabels:
+              app: udr
+      ports:
+        - port: 27017
+          protocol: TCP
+    # subscriber-init Job: one-time provisioning
+    - from:
+        - podSelector:
+            matchLabels:
+              job-name: subscriber-init
+      ports:
+        - port: 27017
+          protocol: TCP
+  egress: []   # MongoDB originates no connections
+
+---
+# =============================================================================
+# UDR — Unified Data Repository
+#
+# Ingress:  UDM, PCF, BSF (SBI reads), NRF callbacks
+# Egress:   MongoDB (subscriber data), NRF (register)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-udr
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "UDR is the data layer; UDM/PCF/BSF may query it, nobody else"
+spec:
+  podSelector:
+    matchLabels:
+      app: udr
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: udm
+        - podSelector:
+            matchLabels:
+              app: pcf
+        - podSelector:
+            matchLabels:
+              app: bsf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - port: 27017
+          protocol: TCP
+
+---
+# =============================================================================
+# UDM — Unified Data Management
+# Ingress:  AMF, AUSF, SMF, NRF, SCP
+# Egress:   NRF, UDR, SCP
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-udm
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: udm
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: amf
+        - podSelector:
+            matchLabels:
+              app: ausf
+        - podSelector:
+            matchLabels:
+              app: smf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: udr
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# AUSF — Authentication Server Function
+# Ingress:  AMF
+# Egress:   NRF, UDM
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ausf
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: ausf
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: amf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: udm
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# PCF — Policy Control Function
+# Ingress:  AMF, SMF, BSF, NRF, SCP
+# Egress:   NRF, UDR, SCP
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pcf
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: pcf
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: amf
+        - podSelector:
+            matchLabels:
+              app: smf
+        - podSelector:
+            matchLabels:
+              app: bsf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: udr
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# BSF — Binding Support Function
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-bsf
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: bsf
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: pcf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: udr
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# NSSF — Network Slice Selection Function
+# Ingress:  AMF
+# Egress:   NRF
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nssf
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: nssf
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: amf
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nrf
+        - podSelector:
+            matchLabels:
+              app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+
+---
+# =============================================================================
+# gNB — UERANSIM simulated gNodeB
+# Ingress:  UE (RLS/UDP 4997)
+# Egress:   AMF (NGAP), UPF (GTP-U), NRF (for reference, optional)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gnb
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: gnb
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # UE → gNB: RLS (UERANSIM radio link simulation)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ue
+      ports:
+        - port: 4997
+          protocol: UDP
+  egress:
+    # gNB → AMF: NGAP (N2)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: amf
+      ports:
+        - port: 38412
+          protocol: SCTP
+    # gNB → UPF: GTP-U (N3)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: upf
+      ports:
+        - port: 2152
+          protocol: UDP
+
+---
+# =============================================================================
+# UE — UERANSIM simulated UE
+# Egress:   gNB (RLS), internet via uesimtun0 tunnel
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ue
+  namespace: open5gs
+spec:
+  podSelector:
+    matchLabels:
+      app: ue
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # gNB → UE: RLS responses
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gnb
+      ports:
+        - port: 4997
+          protocol: UDP
+  egress:
+    # UE → gNB: RLS
+    - to:
+        - podSelector:
+            matchLabels:
+              app: gnb
+      ports:
+        - port: 4997
+          protocol: UDP
+    # UE internet traffic routed via uesimtun0 (data plane, not pod egress)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+
+---
+# =============================================================================
+# Prometheus — cross-namespace scraping (monitoring → open5gs port 9090)
+# Allow all NFs with metrics to accept scrapes from the monitoring namespace.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "Prometheus in 'monitoring' ns must reach NF metrics endpoints on port 9090"
+spec:
+  podSelector:
+    matchLabels: {}   # all pods — only AMF/SMF/UPF/PCF actually expose 9090
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
