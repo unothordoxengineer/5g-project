@@ -1,0 +1,36 @@
+# =============================================================================
+# pre-commit configuration — 5g-project
+#
+# Currently the hooks/pre-commit shell script runs automatically.
+# When gitleaks is available, activate this framework instead:
+#
+#   brew install gitleaks
+#   pip3 install pre-commit
+#   pre-commit install        # installs .git/hooks/pre-commit from this file
+#   pre-commit run --all-files  # scan entire repo once
+#
+# The shell fallback in .git/hooks/pre-commit delegates to gitleaks
+# automatically if it is found on PATH.
+# =============================================================================
+
+repos:
+  # ── gitleaks: high-signal secret detection (300+ entropy + pattern rules) ──
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret scanner)
+        description: Detect hardcoded secrets using Entropy + Regex
+
+  # ── Basic hygiene ──────────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--unsafe]   # allow custom YAML tags (K8s uses !!binary etc.)
+      - id: end-of-file-fixer
+        exclude: '\.png$|\.pkl$|\.csv$'
+      - id: trailing-whitespace
+        exclude: '\.md$|\.png$|\.pkl$|\.csv$'
+      - id: detect-private-key   # catches PEM headers not caught by gitleaks
