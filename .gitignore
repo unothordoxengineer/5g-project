@@ -4,3 +4,7 @@ build/
 __pycache__/
 serving/__pycache__/
 *.pyc
+
+# Synthetic / generated data — large CSV files; regenerate with:
+#   cd ml && /opt/homebrew/bin/python3 generate_synthetic_data.py
+data/synthetic/

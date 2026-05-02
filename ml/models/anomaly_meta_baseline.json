@@ -1,0 +1,22 @@
+{
+  "model": "IsolationForest",
+  "n_estimators": 300,
+  "contamination": 0.07419354838709677,
+  "threshold": 0.6021896157354288,
+  "features": [
+    "cpu_upf",
+    "upf_replicas",
+    "cpu_mongodb"
+  ],
+  "train_samples": 310,
+  "test_samples": 78,
+  "eval_on": "full_dataset",
+  "recall": 0.9032258064516129,
+  "fpr": 0.03361344537815126,
+  "precision": 0.7,
+  "f1": 0.7887323943661972,
+  "TP": 28,
+  "FP": 12,
+  "FN": 3,
+  "TN": 345
+}

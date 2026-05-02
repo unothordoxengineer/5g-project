@@ -1,16 +1,17 @@
 {
   "model": "ARIMA",
   "order": [
-    3,
-    0,
+    2,
+    1,
     1
   ],
-  "train_samples": 334,
-  "test_samples": 84,
-  "forecast_horizon_steps": 84,
-  "mape_percent": 3.644060844417761,
-  "rmse": 0.09287620061265284,
-  "mae": 0.07276359898151813,
-  "aic": -63.654267902504955,
-  "bic": -40.78742194464475
+  "train_samples": 8064,
+  "test_samples": 2016,
+  "forecast_steps": 360,
+  "mape_percent": 9.881358351343197,
+  "rmse": 27.999364786210016,
+  "mae": 22.734684555982415,
+  "aic": 68086.07232896611,
+  "bic": 68114.05249286485,
+  "augmented": true
 }

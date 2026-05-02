@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3
 """
 run_all_models.py — Execute all Phase 5 ML models and produce outputs.
 
@@ -16,20 +16,34 @@ Key design decisions:
     to remove correlated noise across the 14 NFs and yield compact, well-separated
     clusters (Silhouette > 0.5).
 
+Augmented training (--augment flag):
+  When --augment is passed, per-metric synthetic CSVs from data/synthetic/ are
+  merged with the real data before training.  The combined dataset contains 7 days
+  of diurnal synthetic telemetry (20 160 timesteps, 50 labelled anomaly events)
+  plus the original 8-hour load-test export, giving models exposure to the full
+  operational envelope (night / ramp / daytime / evening / weekend patterns).
+
 Saves:
   - models/*.pkl  (joblib-serialised estimators)
   - models/*_meta.json  (metric summaries for report appendix)
   - figures/*.png  (publication-quality, 150 dpi)
 
 Usage:
-  cd ~/5g-project/ml && python3 run_all_models.py
+  cd ~/5g-project/ml && /opt/homebrew/bin/python3 run_all_models.py
+  cd ~/5g-project/ml && /opt/homebrew/bin/python3 run_all_models.py --augment
 """
 
 import warnings
 warnings.filterwarnings('ignore')
 
-import sys, json
+import sys, json, argparse
 from pathlib import Path
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+_parser = argparse.ArgumentParser(description='Train Phase-5 ML models')
+_parser.add_argument('--augment', action='store_true',
+                     help='Merge synthetic data from data/synthetic/ before training')
+_args = _parser.parse_args()
 
 import numpy as np
 import pandas as pd
@@ -59,12 +73,16 @@ except ImportError:
     HAS_AUTO_ARIMA = False
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR  = Path(__file__).parent.parent
-DATA_DIR  = BASE_DIR / 'data' / 'raw'
-MODEL_DIR = Path(__file__).parent / 'models'
-FIG_DIR   = Path(__file__).parent / 'figures'
+BASE_DIR   = Path(__file__).parent.parent
+DATA_DIR   = BASE_DIR / 'data' / 'raw'
+SYNTH_DIR  = BASE_DIR / 'data' / 'synthetic'
+MODEL_DIR  = Path(__file__).parent / 'models'
+FIG_DIR    = Path(__file__).parent / 'figures'
 MODEL_DIR.mkdir(exist_ok=True)
 FIG_DIR.mkdir(exist_ok=True)
+
+AUGMENT = _args.augment
+print(f'  Data mode: {"AUGMENTED (real + synthetic)" if AUGMENT else "real only"}')
 
 # ── Publication style ─────────────────────────────────────────────────────────
 plt.rcParams.update({
@@ -84,11 +102,31 @@ PALETTE = ['#2196F3', '#4CAF50', '#FF5722', '#9C27B0', '#FF9800']
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_metric(filename):
-    """Load a single-metric CSV; return tidy (timestamp, pod_name, value) DF."""
+    """
+    Load a single-metric CSV; return tidy (timestamp, pod_name, value) DF.
+
+    When AUGMENT=True, also loads the matching synthetic file from SYNTH_DIR
+    and concatenates it so models see both the 8-hour real export and the full
+    7-day synthetic telemetry.
+    """
     df = pd.read_csv(DATA_DIR / filename, parse_dates=['timestamp'])
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
-    return df.dropna(subset=['value'])
+    df = df.dropna(subset=['value'])
+
+    if AUGMENT:
+        synth_path = SYNTH_DIR / filename
+        if synth_path.exists():
+            synth = pd.read_csv(synth_path, parse_dates=['timestamp'])
+            synth['timestamp'] = pd.to_datetime(synth['timestamp'], utc=True)
+            synth['value'] = pd.to_numeric(synth['value'], errors='coerce')
+            synth = synth.dropna(subset=['value'])
+            # Keep only columns that exist in the real data to stay compatible
+            shared_cols = [c for c in df.columns if c in synth.columns]
+            synth = synth[shared_cols]
+            df = pd.concat([df, synth], ignore_index=True).sort_values('timestamp')
+
+    return df
 
 
 def pivot_and_rename(df, prefix, resample='1min'):
@@ -377,6 +415,7 @@ json.dump({
     'precision':      float(precision),
     'f1':             float(f1),
     'TP': int(TP), 'FP': int(FP), 'FN': int(FN), 'TN': int(TN),
+    'augmented':      AUGMENT,
 }, open(MODEL_DIR / 'anomaly_meta.json', 'w'), indent=2)
 print(f'  Models → models/isolation_forest.pkl, anomaly_scaler.pkl')
 
@@ -553,6 +592,7 @@ json.dump({
     'mae':            float(mae),
     'aic':            float(model.aic),
     'bic':            float(model.bic),
+    'augmented':      AUGMENT,
 }, open(MODEL_DIR / 'arima_meta.json', 'w'), indent=2)
 print(f'  Models → models/arima_model.pkl')
 
@@ -783,6 +823,7 @@ json.dump({
     'inertia':           float(km_final.inertia_),
     'cluster_states':    {str(k): v for k, v in cname.items()},
     'state_distribution': Xdf['state'].value_counts().to_dict(),
+    'augmented':         AUGMENT,
 }, open(MODEL_DIR / 'clustering_meta.json', 'w'), indent=2, default=str)
 print(f'  Models → models/kmeans_model.pkl, cluster_scaler.pkl, cluster_pca.pkl')
 

@@ -1,8 +1,8 @@
 {
   "model": "KMeans",
-  "k": 2,
+  "k": 6,
   "pca_components": 5,
-  "pca_variance_pct": 75.21010348743859,
+  "pca_variance_pct": 93.98889563123234,
   "features": [
     "cpu_amf",
     "cpu_ausf",
@@ -18,22 +18,50 @@
     "cpu_udr",
     "cpu_ue",
     "cpu_upf",
+    "mem_amf",
+    "mem_ausf",
+    "mem_bsf",
+    "mem_gnb",
+    "mem_mongodb",
+    "mem_nrf",
+    "mem_nssf",
+    "mem_pcf",
+    "mem_scp",
+    "mem_smf",
+    "mem_udm",
+    "mem_udr",
+    "mem_ue",
+    "mem_upf",
     "upf_replicas",
     "gtp_in_pps",
     "gtp_out_pps",
     "ran_ue_count",
+    "cpu_amf_roll5m",
+    "cpu_amf_roll5std",
+    "cpu_ausf_roll5m",
+    "cpu_ausf_roll5std",
+    "cpu_bsf_roll5m",
+    "cpu_bsf_roll5std",
     "hpa_delta"
   ],
-  "train_samples": 388,
-  "silhouette": 0.5027808994886016,
-  "dbi": 0.9248381691988955,
-  "inertia": 2572.169987694593,
+  "silhouette": 0.634326174923528,
+  "dbi": 0.5956388079622836,
+  "inertia": 21722.169291732116,
   "cluster_states": {
-    "1": "IDLE",
-    "0": "HIGH-LOAD"
+    "0": "STATE-0",
+    "2": "STATE-1",
+    "3": "STATE-2",
+    "5": "STATE-3",
+    "1": "STATE-4",
+    "4": "STATE-5"
   },
   "state_distribution": {
-    "IDLE": 270,
-    "HIGH-LOAD": 118
-  }
+    "STATE-0": 3719,
+    "STATE-4": 3588,
+    "STATE-2": 2287,
+    "STATE-1": 270,
+    "STATE-5": 132,
+    "STATE-3": 84
+  },
+  "augmented": true
 }
