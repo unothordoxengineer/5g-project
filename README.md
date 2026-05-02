@@ -30,7 +30,7 @@ The system is designed for **cloud portability**: all Kubernetes manifests use s
 
 ![System Architecture](docs/architecture.png)
 
-> *Six-layer architecture: simulated RAN (UERANSIM gNB + UE) → 5G SA Core (14 Open5GS NFs) → Observability (Prometheus + Grafana) → AI/ML Serving (FastAPI + 3 models) → Closed-Loop Automation → AWS Migration path (Phase 8).*
+> *Full operational architecture: (1) Radio Access Network — UERANSIM gNB + 200 simulated UEs; (2) 5G SA Core — all 14 Open5GS Network Functions with HPA-managed UPF; (3) Monitoring & Observability — Prometheus, Grafana, Alertmanager; (4) AI/ML Model Serving — FastAPI with Isolation Forest, ARIMA, and k-Means endpoints; (5) Closed-Loop Control Engine — 30-second detect → decide → act cycle; (6) Cloud/Infrastructure — AWS EKS, ECR, EBS, CloudWatch, VPC, IAM. End-to-end data flow shown across all 9 stages from UE registration to system self-optimisation.*
 
 ---
 
