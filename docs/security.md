@@ -86,28 +86,39 @@ The following matrix defines allowed flows.  `→` = initiates connection.
 - **DNS egress for all**: kube-dns is required for service-name resolution
   (`nrf`, `amf`, etc.).  Without it every NF fails on startup.
 
-### 2.3 CNI Enforcement Limitation
+### 2.3 CNI Enforcement — kindnet nfqueue
 
-This cluster uses **kindnet** (KinD's default CNI), which does not enforce
-`NetworkPolicy` rules.  The policies are stored in the Kubernetes API server
-and are syntactically correct, but they have **no runtime effect** on this
-cluster.
+This cluster uses **kindnet** (KinD's default CNI).  Versions of kindnet
+shipped with KinD ≥ 0.23 include a built-in NetworkPolicy controller that
+enforces policies via **nfqueue** (Netfilter queue 101).
 
-**To enable enforcement**, replace kindnet with Calico:
+The enforcement path is:
 
-```yaml
-# kind-config.yaml — add before creating the cluster
-networking:
-  disableDefaultCNI: true
+```
+nftables table inet kindnet-network-policies
+  chain postrouting  (priority srcnat-5)
+    ct state established,related → ACCEPT
+    ip saddr @podips-v4          → QUEUE flags bypass to 101
+  chain prerouting   (priority dstnat+5, i.e. after kube-proxy DNAT)
+    ip daddr @podips-v4          → QUEUE flags bypass to 101
 ```
 
-```bash
-# After cluster creation:
-kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-```
+A userspace daemon evaluates each queued packet against the namespace's
+NetworkPolicy objects and accepts or drops it.  Traffic between
+non-pod IPs (e.g. kubelet probes from the node gateway `10.244.x.1`) is
+**not** queued and bypasses policy evaluation.
+
+**Practical consequence:** every pod that is subject to the `default-deny-all`
+policy **must** have explicit Ingress and Egress rules, or all its traffic
+will be silently dropped.  This was confirmed in Phase 8: new pods
+(`ml-serving-api`, `closed-loop-engine`) deployed without NetworkPolicies
+could not communicate with any other pod until `allow-ml-serving-api-ingress`
+and `allow-closed-loop-egress` were added.
 
 In a production environment (AKS, EKS, GKE, bare-metal), the cloud CNI
-(Azure CNI + Calico, AWS VPC CNI, or Cilium) enforces NetworkPolicies natively.
+(Azure CNI + Calico, AWS VPC CNI, or Cilium) enforces NetworkPolicies natively
+at the kernel data-plane level (eBPF or iptables), which is more performant
+than nfqueue for high-throughput workloads.
 
 ---
 
@@ -338,13 +349,13 @@ kubectl auth can-i patch deployment/upf -n open5gs \
 
 | Control | Status | Note |
 |---------|--------|------|
-| Default deny NetworkPolicy | ✅ Applied | Not enforced — kindnet CNI |
-| Per-NF NetworkPolicies | ✅ Applied | 20 policies covering all NFs |
+| Default deny NetworkPolicy | ✅ Applied & enforced | kindnet nfqueue enforces from v0.23+ |
+| Per-NF NetworkPolicies | ✅ Applied | 23 policies covering all NFs + ml-serving-api + closed-loop |
 | MongoDB credential Secret | ✅ Created | Auth migration required to activate |
 | Dedicated ServiceAccounts | ✅ Created | Need to patch Deployments to reference them |
 | automountServiceAccountToken: false | ✅ All NFs | Token injection disabled |
 | Least-privilege RBAC | ✅ Defined | NFs: read-only; autoscaler: upf-patch only |
 | Secrets at rest encryption | ❌ Not configured | Requires etcd encryption config |
 | mTLS between NFs | ❌ Design only | Requires Istio or Open5GS TLS config |
-| CNI NetworkPolicy enforcement | ❌ kindnet | Replace with Calico/Cilium for enforcement |
-| Secret scanning in CI | ❌ Not configured | Add gitleaks pre-commit hook |
+| CNI NetworkPolicy enforcement | ✅ kindnet nfqueue | Enforced; nfqueue userspace daemon active |
+| Secret scanning in CI | ✅ Configured | gitleaks pre-commit hook installed |

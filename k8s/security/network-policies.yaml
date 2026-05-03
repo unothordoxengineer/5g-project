@@ -2,12 +2,16 @@
 # NetworkPolicies — Open5GS 5G Core Security Hardening
 #
 # IMPORTANT — CNI enforcement note:
-#   This cluster uses kindnet, which does NOT enforce NetworkPolicy rules.
-#   The policies below are valid Kubernetes objects and are stored in etcd.
-#   To enforce them, replace kindnet with Calico or Cilium:
-#     kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
-#   (requires cluster recreation with `networking: { disableDefaultCNI: true }`
-#    in kind-config.yaml)
+#   This cluster uses kindnet (KinD ≥ 0.23), which DOES enforce NetworkPolicy
+#   rules via nfqueue (netfilter queue 101).  A userspace daemon evaluates
+#   each inter-pod packet against the policies below.  Traffic from non-pod
+#   sources (kubelet node-gateway probes) bypasses policy evaluation.
+#   Every pod subject to default-deny-all MUST have explicit Ingress+Egress
+#   rules or its traffic will be silently dropped.
+#
+#   In production (AKS/EKS/GKE), the cloud CNI (Calico, Cilium, AWS VPC CNI)
+#   enforces NetworkPolicies at the kernel data-plane level (eBPF/iptables),
+#   which is more performant than nfqueue for high-throughput workloads.
 #
 # Port reference (K8s-internal, differs from Docker external mapping):
 #   SBI (HTTP/2)  → port 80   (NRF external: NodePort 7777 is a Docker alias)
@@ -862,4 +866,82 @@ spec:
               kubernetes.io/metadata.name: monitoring
       ports:
         - port: 9090
+          protocol: TCP
+
+---
+# =============================================================================
+# ML Serving API — ingress from closed-loop engine + Prometheus scraping
+# The closed-loop engine sends prediction requests to port 8000.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ml-serving-api-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "closed-loop engine must reach ml-serving-api:8000 for ML inference; Prometheus may scrape /metrics"
+spec:
+  podSelector:
+    matchLabels:
+      app: ml-serving-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: closed-loop-engine
+      ports:
+        - port: 8000
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8000
+          protocol: TCP
+
+---
+# =============================================================================
+# Closed-Loop Engine — egress to ml-serving-api, Prometheus, kube-apiserver
+# The engine polls Prometheus for UPF metrics, queries the ML serving API for
+# anomaly/forecast/cluster predictions, and uses kubectl to scale the UPF.
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-closed-loop-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "closed-loop engine must reach ml-serving-api:8000, Prometheus:9090, and kube-apiserver:443 to function"
+spec:
+  podSelector:
+    matchLabels:
+      app: closed-loop-engine
+  policyTypes:
+    - Egress
+  egress:
+    # ML serving API (container port 8000 — pod IP direct)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ml-serving-api
+      ports:
+        - port: 8000
+          protocol: TCP
+    # Prometheus in the monitoring namespace (port 9090)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+    # Kubernetes API server — ClusterIP 10.96.0.1:443 (for kubectl scale)
+    - to:
+        - ipBlock:
+            cidr: 10.96.0.1/32
+      ports:
+        - port: 443
           protocol: TCP

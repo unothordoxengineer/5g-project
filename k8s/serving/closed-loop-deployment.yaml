@@ -64,13 +64,19 @@ spec:
         app: closed-loop-engine
     spec:
       serviceAccountName: closed-loop-sa
+      # Pin to open5gs-worker so the closed-loop engine is co-located with
+      # ml-serving-api, avoiding cross-node pod-IP routing on KinD/Docker-Mac
+      # where the Docker bridge drops NEW connections between nodes for pods
+      # that lack active conntrack entries (known Docker-for-Mac limitation).
+      nodeSelector:
+        kubernetes.io/hostname: open5gs-worker
       containers:
         - name: closed-loop
           image: 5g-closed-loop:latest
           imagePullPolicy: Never
           env:
             - name: PROMETHEUS_URL
-              value: "http://prometheus-kube-prometheus-prometheus.monitoring:9090"
+              value: "http://prometheus-prometheus.monitoring:9090"
             - name: SERVING_API_URL
               value: "http://ml-serving-api.open5gs:80"
             - name: POLL_INTERVAL_S
