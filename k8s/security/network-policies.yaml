@@ -424,7 +424,7 @@ metadata:
   name: allow-mongodb-ingress
   namespace: open5gs
   annotations:
-    security.open5gs/reason: "MongoDB holds subscriber PII — only UDR may access it, no direct NF access"
+    security.open5gs/reason: "MongoDB holds subscriber PII — only UDR and PCF may access it directly; other NFs go through UDR SBI"
 spec:
   podSelector:
     matchLabels:
@@ -438,6 +438,14 @@ spec:
         - podSelector:
             matchLabels:
               app: udr
+      ports:
+        - port: 27017
+          protocol: TCP
+    # PCF → MongoDB: policy data (PCF has db_uri in its config and connects directly)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: pcf
       ports:
         - port: 27017
           protocol: TCP
@@ -662,6 +670,14 @@ spec:
               app: scp
       ports:
         - port: 80
+          protocol: TCP
+    # PCF → MongoDB: direct policy data access (db_uri in pcf.yaml)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - port: 27017
           protocol: TCP
 
 ---
