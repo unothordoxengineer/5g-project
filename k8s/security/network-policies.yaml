@@ -298,7 +298,7 @@ metadata:
   name: allow-smf-egress
   namespace: open5gs
   annotations:
-    security.open5gs/reason: "SMF talks to NRF, PCF, UDM (policy+data), UPF (PFCP N4) — nothing else"
+    security.open5gs/reason: "SMF talks to NRF, PCF, UDM, BSF (policy+data), UPF (PFCP N4) — nothing else"
 spec:
   podSelector:
     matchLabels:
@@ -306,7 +306,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # SMF → NRF, PCF, UDM, SCP: SBI
+    # SMF → NRF, PCF, UDM, BSF, SCP: SBI
     - to:
         - podSelector:
             matchLabels:
@@ -317,6 +317,9 @@ spec:
         - podSelector:
             matchLabels:
               app: udm
+        - podSelector:
+            matchLabels:
+              app: bsf
         - podSelector:
             matchLabels:
               app: scp
@@ -668,6 +671,14 @@ spec:
         - podSelector:
             matchLabels:
               app: scp
+      ports:
+        - port: 80
+          protocol: TCP
+    # PCF → BSF: Nbsf_Management_RegisterBinding — register PDU session binding
+    - to:
+        - podSelector:
+            matchLabels:
+              app: bsf
       ports:
         - port: 80
           protocol: TCP
