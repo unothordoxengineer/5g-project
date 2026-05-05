@@ -9,7 +9,7 @@
 [![Open5GS](https://img.shields.io/badge/open5gs-v2.7.2-orange)](https://open5gs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Final Year Project**
+Final Year Project * 
 2026
 
 </div>
