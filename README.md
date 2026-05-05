@@ -447,7 +447,7 @@ Harare Institute of Technology (HIT), Zimbabwe, 2026
 - **HIT Department of Electronic Engineering** — for the project brief, laboratory access, and academic supervision throughout the programme.
 - **[Open5GS Community](https://open5gs.org/)** — for maintaining a rigorous, standards-compliant open-source implementation of the 3GPP 5G SA core specifications, without which this project would not be possible.
 - **[UERANSIM Community](https://github.com/aligungr/UERANSIM)** — for the open-source 5G RAN/UE simulator that enabled realistic end-to-end testing without physical radio hardware.
-- **[Anthropic Claude](https://www.anthropic.com/)** — AI development assistant used throughout the project for code generation, debugging, documentation, and architectural review.
+
 
 ---
 
