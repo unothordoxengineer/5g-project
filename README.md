@@ -9,8 +9,8 @@
 [![Open5GS](https://img.shields.io/badge/open5gs-v2.7.2-orange)](https://open5gs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**B.Eng Electronic Engineering — Final Year Project**
-Harare Institute of Technology · Zimbabwe · 2026
+Final Year Project**
+2026
 
 </div>
 
@@ -203,7 +203,7 @@ The following software is required to run the project locally. Versions were tes
 | Terraform | 1.5 | `brew install hashicorp/tap/terraform` |
 | AWS CLI | 2.x | `brew install awscli` *(Phase 8 only)* |
 
-**System requirements:** 8 GB RAM minimum (16 GB recommended), 20 GB free disk space.
+**System requirements:** 8 GB RAM minimum, 20 GB free disk space.
 
 ---
 
