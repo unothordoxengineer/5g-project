@@ -437,7 +437,7 @@ The GitHub Actions pipeline runs on every push to `main` and every pull request:
 
 **Nigel Farai Kadzinga**
 B.Eng Electronic Engineering — Final Year Project
-Harare Institute of Technology (HIT), Zimbabwe, 2026
+, 2026
 [nigelkadzinga91@gmail.com](mailto:nigelkadzinga91@gmail.com) · [github.com/unothordoxengineer](https://github.com/unothordoxengineer)
 
 ---
