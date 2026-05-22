@@ -72,8 +72,8 @@ spec:
         kubernetes.io/hostname: open5gs-worker
       containers:
         - name: closed-loop
-          image: 5g-closed-loop:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/5g-closed-loop:latest
+          imagePullPolicy: IfNotPresent
           env:
             - name: PROMETHEUS_URL
               value: "http://prometheus-prometheus.monitoring:9090"

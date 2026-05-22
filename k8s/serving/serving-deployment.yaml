@@ -19,8 +19,8 @@ spec:
     spec:
       containers:
         - name: serving-api
-          image: 5g-serving-api:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/5g-serving-api:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
               name: http

@@ -182,7 +182,7 @@ spec:
       ports:
         - port: 9090
           protocol: TCP
-    # SBI callbacks from NRF/SCP/SMF
+    # SBI callbacks from NRF/SCP/SMF + NEF (Namf_Communication UE-context queries)
     - from:
         - podSelector:
             matchLabels:
@@ -193,6 +193,9 @@ spec:
         - podSelector:
             matchLabels:
               app: smf
+        - podSelector:
+            matchLabels:
+              app: nef
       ports:
         - port: 80
           protocol: TCP
@@ -260,7 +263,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # AMF, NRF callbacks, SCP → SMF: SBI
+    # AMF, NRF callbacks, SCP, NEF → SMF: SBI
     - from:
         - podSelector:
             matchLabels:
@@ -271,6 +274,9 @@ spec:
         - podSelector:
             matchLabels:
               app: scp
+        - podSelector:
+            matchLabels:
+              app: nef
       ports:
         - port: 80
           protocol: TCP
@@ -449,6 +455,14 @@ spec:
         - podSelector:
             matchLabels:
               app: pcf
+      ports:
+        - port: 27017
+          protocol: TCP
+    # NEF → MongoDB: read-only subscriber profile queries for /ue-status
+    - from:
+        - podSelector:
+            matchLabels:
+              app: nef
       ports:
         - port: 27017
           protocol: TCP
@@ -657,6 +671,10 @@ spec:
         - podSelector:
             matchLabels:
               app: scp
+        # NEF → PCF: Npcf_PolicyAuthorization (QoS policy requests)
+        - podSelector:
+            matchLabels:
+              app: nef
       ports:
         - port: 80
           protocol: TCP
