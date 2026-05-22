@@ -1,0 +1,145 @@
+---
+# NEF ConfigMap — env vars that don't require secrecy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nef-config
+  namespace: open5gs
+data:
+  NEF_ENVIRONMENT:         "local"
+  NEF_LOG_LEVEL:           "INFO"
+  NEF_RATE_LIMIT_PER_MINUTE: "100"
+  NEF_MONGODB_URI:         "mongodb://mongodb.open5gs.svc.cluster.local:27017/open5gs"
+  NEF_AMF_SBI_URL:         "http://amf.open5gs.svc.cluster.local:80"
+  NEF_PCF_SBI_URL:         "http://pcf.open5gs.svc.cluster.local:80"
+  NEF_SMF_SBI_URL:         "http://smf.open5gs.svc.cluster.local:80"
+  NEF_WEBHOOK_TIMEOUT_S:   "5"
+  NEF_WEBHOOK_MAX_RETRIES: "3"
+
+---
+# NEF Secret — sensitive values (JWT secret, Cognito creds on AWS)
+# On AWS: replace data values with references to AWS Secrets Manager via
+#         External Secrets Operator or Secrets Store CSI Driver
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nef-secret
+  namespace: open5gs
+type: Opaque
+stringData:
+  # CHANGE THIS in production — use `openssl rand -hex 32`
+  NEF_JWT_SECRET: "local-dev-jwt-secret-change-before-aws-deploy"
+  # AWS Cognito (left blank for local — set in terraform/nef.tf)
+  NEF_COGNITO_USER_POOL_ID:  ""
+  NEF_COGNITO_CLIENT_ID:     ""
+  NEF_COGNITO_JWKS_URL:      ""
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nef
+  namespace: open5gs
+  labels:
+    app: nef
+    component: api-gateway
+    phase: "8"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nef
+  template:
+    metadata:
+      labels:
+        app: nef
+        component: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "8080"
+        prometheus.io/path:   "/metrics"
+    spec:
+      # Co-locate with workers (not control-plane)
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: nef
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/5g-nef:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: nef-config
+            - secretRef:
+                name: nef-secret
+          resources:
+            requests:
+              cpu:    "100m"
+              memory: "128Mi"
+            limits:
+              cpu:    "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+
+---
+# ClusterIP (internal) — NEF-to-Open5GS traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: nef
+  namespace: open5gs
+  labels:
+    app: nef
+spec:
+  type: ClusterIP
+  selector:
+    app: nef
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+# NodePort — external access for local/KinD testing
+# On AWS: replaced by API Gateway; this NodePort is removed in production overlay
+apiVersion: v1
+kind: Service
+metadata:
+  name: nef-external
+  namespace: open5gs
+  labels:
+    app: nef
+    exposure: external
+  annotations:
+    # Signals to the AWS overlay that this service is replaced by API Gateway
+    aws.5g-nef/replaced-by: "api-gateway"
+spec:
+  type: NodePort
+  selector:
+    app: nef
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      nodePort: 30880
+      protocol: TCP

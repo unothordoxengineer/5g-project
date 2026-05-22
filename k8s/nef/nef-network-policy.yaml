@@ -1,0 +1,113 @@
+---
+# NEF ingress — allow external traffic on port 8080 from outside the cluster
+# (ipBlock 0.0.0.0/0 = from the NodePort / LoadBalancer / API Gateway)
+# and allow Prometheus scraping from the monitoring namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nef-ingress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "NEF accepts external API traffic + Prometheus scrape"
+spec:
+  podSelector:
+    matchLabels:
+      app: nef
+  policyTypes:
+    - Ingress
+  ingress:
+    # External clients via NodePort / API Gateway
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.244.0.0/16   # pod CIDR — intra-cluster handled by other rules
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Prometheus scraping from monitoring namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8080
+          protocol: TCP
+    # PCF callback (internal pcf-notify)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: pcf
+      ports:
+        - port: 8080
+          protocol: TCP
+
+---
+# NEF egress — reach Open5GS NFs and MongoDB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nef-egress
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "NEF calls AMF (UE status), PCF (QoS), SMF, MongoDB (subscriber queries)"
+spec:
+  podSelector:
+    matchLabels:
+      app: nef
+  policyTypes:
+    - Egress
+  egress:
+    # DNS (required for all service name resolution)
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # AMF SBI — UE status queries (Namf_Communication)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: amf
+      ports:
+        - port: 80
+          protocol: TCP
+    # PCF SBI — QoS policy (Npcf_PolicyAuthorization)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: pcf
+      ports:
+        - port: 80
+          protocol: TCP
+    # SMF SBI — session queries (Nsmf_PDUSession)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: smf
+      ports:
+        - port: 80
+          protocol: TCP
+    # MongoDB — subscriber profile read-only queries
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - port: 27017
+          protocol: TCP
+    # Webhook delivery to external URLs
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
