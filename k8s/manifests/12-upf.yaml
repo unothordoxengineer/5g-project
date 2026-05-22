@@ -33,8 +33,19 @@ data:
           - address: 0.0.0.0
             advertise: upf
       session:
+        # Slice 1 — eMBB (SST=1, DNN=internet)
         - subnet: 10.45.0.0/16
           gateway: 10.45.0.1
+          dnn: internet
+        # Slice 2 — mMTC (SST=2, DNN=iot)
+        - subnet: 10.46.0.0/16
+          gateway: 10.46.0.1
+          dnn: iot
+        # Slice 3 — URLLC (SST=3, DNN=urllc)
+        - subnet: 10.47.0.0/16
+          gateway: 10.47.0.1
+          dnn: urllc
+        # IPv6 pool (eMBB)
         - subnet: 2001:db8:cafe::/48
           gateway: 2001:db8:cafe::1
       metrics:
@@ -134,6 +145,19 @@ spec:
               value: "10.45.0.0/16"
             - name: ENABLE_NAT
               value: "true"
+          lifecycle:
+            postStart:
+              exec:
+                # Add gateway IPs for mMTC and URLLC slices + NAT rules
+                command:
+                  - sh
+                  - -c
+                  - |
+                    sleep 3
+                    ip addr add 10.46.0.1/16 dev ogstun 2>/dev/null || true
+                    ip addr add 10.47.0.1/16 dev ogstun 2>/dev/null || true
+                    iptables -t nat -A POSTROUTING -s 10.46.0.0/16 ! -o ogstun -j MASQUERADE 2>/dev/null || true
+                    iptables -t nat -A POSTROUTING -s 10.47.0.0/16 ! -o ogstun -j MASQUERADE 2>/dev/null || true
           readinessProbe:
             exec:
               command: ["pgrep", "-x", "open5gs-upfd"]

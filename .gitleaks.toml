@@ -1,0 +1,15 @@
+# gitleaks configuration
+# Allowlist for known 5G test credentials (UERANSIM/Open5GS simulation keys)
+# These are well-known public test values from the UERANSIM project —
+# they are NOT real credentials and appear in every Open5GS tutorial.
+
+title = "5g-project gitleaks config"
+
+[allowlist]
+  description = "Allow UERANSIM 5G simulation test keys"
+  regexes = [
+    # Standard UERANSIM test SIM K key
+    '''465B5CE8B199B49FAA5F0A2EE238A6BC''',
+    # Standard UERANSIM test OPc value
+    '''E8ED289DEBA952E4283B54E88E6183CA''',
+  ]

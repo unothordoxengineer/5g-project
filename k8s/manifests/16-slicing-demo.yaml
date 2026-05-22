@@ -1,0 +1,359 @@
+# =============================================================================
+# Network Slicing Demo — UE2 (mMTC/SST=2) and UE3 (URLLC/SST=3)
+#
+# UE1 (eMBB/SST=1) is already deployed in 14-ue.yaml.
+# This file adds two additional simulated UEs, each pinned to a different
+# 5G network slice via their configured-nssai and default-nssai.
+#
+# Slice mapping:
+#   Slice 1 — eMBB  (SST=1): DNN=internet  subnet 10.45.0.0/16
+#   Slice 2 — mMTC  (SST=2): DNN=iot       subnet 10.46.0.0/16
+#   Slice 3 — URLLC (SST=3): DNN=urllc     subnet 10.47.0.0/16
+# =============================================================================
+
+# ── Subscriber seed job — inserts IMSI 002 (mMTC) and 003 (URLLC) ───────────
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: subscriber-init-slices
+  namespace: open5gs
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-mongo
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-mongodb:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until mongosh --host mongodb --quiet --eval "db.adminCommand('ping').ok" >/dev/null 2>&1; do
+                sleep 2
+              done
+              echo "MongoDB ready."
+      containers:
+        - name: insert-slice-subscribers
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-mongodb:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - mongosh
+            - "mongodb://mongodb/open5gs"
+            - "--eval"
+            - |
+              // ── Helper ────────────────────────────────────────────────────
+              function upsertSubscriber(imsiNum, defaultSst, sessionName, ambr) {
+                var imsi = '99970000000000' + imsiNum;
+                if (db.subscribers.countDocuments({imsi: imsi}) > 0) {
+                  print('Already exists: imsi-' + imsi); return;
+                }
+                db.subscribers.insertOne({
+                  imsi: imsi,
+                  msisdn: [], imeisv: [], mme_host: [], mme_realm: [],
+                  purge_flag: [],
+                  security: {
+                    k: '465B5CE8B199B49FAA5F0A2EE238A6BC',
+                    op: null,
+                    opc: 'E8ED289DEBA952E4283B54E88E6183CA',
+                    amf: '8000',
+                    sqn: NumberLong(193)
+                  },
+                  ambr: ambr,
+                  slice: [{
+                    sst: defaultSst,
+                    default_indicator: true,
+                    session: [{
+                      name: sessionName,
+                      type: 3,
+                      qos: { index: (defaultSst === 3 ? 1 : 9),
+                             arp: { priority_level: (defaultSst === 3 ? 1 : defaultSst === 2 ? 15 : 8),
+                                    pre_emption_capability: 1,
+                                    pre_emption_vulnerability: 1 } },
+                      ambr: ambr,
+                      ue: { addr: '0.0.0.0' },
+                      _id: new ObjectId()
+                    }],
+                    _id: new ObjectId()
+                  }],
+                  access_restriction_data: 32,
+                  subscriber_status: 0,
+                  operator_determined_barring: 0,
+                  network_access_mode: 0,
+                  __v: 0
+                });
+                print('Inserted: imsi-' + imsi + '  slice SST=' + defaultSst + ' DNN=' + sessionName);
+              }
+
+              // UE2 — mMTC  (SST=2, DNN=iot,   1 Mbps DL/UL — IoT devices)
+              upsertSubscriber('2', 2, 'iot',
+                { downlink: { value: 1, unit: 2 }, uplink: { value: 1, unit: 2 } });
+
+              // UE3 — URLLC (SST=3, DNN=urllc, 10 Mbps DL / 5 Mbps UL)
+              upsertSubscriber('3', 3, 'urllc',
+                { downlink: { value: 10, unit: 2 }, uplink: { value: 5, unit: 2 } });
+---
+# ── UE2: mMTC — Massive Machine-Type Communications (SST=2) ─────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ue2-config
+  namespace: open5gs
+data:
+  nr-ue.yaml: |
+    supi: 'imsi-999700000000002'
+    mcc: '999'
+    mnc: '70'
+    protectionScheme: 0
+    homeNetworkPublicKey: '5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650'
+    homeNetworkPublicKeyId: 1
+    routingIndicator: '0000'
+
+    key: '465B5CE8B199B49FAA5F0A2EE238A6BC'
+    op: 'E8ED289DEBA952E4283B54E88E6183CA'
+    opType: 'OPC'
+    amf: '8000'
+    imei: '356938035643804'
+    imeiSv: '4370816125816152'
+
+    tunNetmask: '255.255.255.0'
+
+    gnbSearchList:
+      - gnb
+
+    uacAic:
+      mps: false
+      mcs: false
+
+    uacAcc:
+      normalClass: 0
+      class11: false
+      class12: false
+      class13: false
+      class14: false
+      class15: false
+
+    sessions:
+      - type: 'IPv4'
+        apn: 'iot'           # mMTC DNN
+        slice:
+          sst: 2             # SST=2 → mMTC slice → 10.46.0.0/16
+
+    configured-nssai:
+      - sst: 2               # Only advertise mMTC slice
+
+    default-nssai:
+      - sst: 2
+        sd: 1
+
+    integrity:
+      IA1: true
+      IA2: true
+      IA3: true
+
+    ciphering:
+      EA1: true
+      EA2: true
+      EA3: true
+
+    integrityMaxRate:
+      uplink: 'full'
+      downlink: 'full'
+
+  ue-entrypoint.sh: |
+    #!/bin/sh
+    /usr/local/bin/nr-ue -c /etc/ueransim/nr-ue.yaml &
+    UE_PID=$!
+    echo "[ue2-entrypoint] waiting for uesimtun0..."
+    for i in $(seq 1 30); do
+        ip link show uesimtun0 >/dev/null 2>&1 && break
+        sleep 1
+    done
+    if ip link show uesimtun0 >/dev/null 2>&1; then
+        echo "[ue2-entrypoint] uesimtun0 up"
+        ip addr show uesimtun0 | grep 'inet '
+    else
+        echo "[ue2-entrypoint] WARNING: uesimtun0 not found"
+    fi
+    wait $UE_PID
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ue2
+  namespace: open5gs
+  labels:
+    app: ue2
+    slice: mmtc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ue2
+  template:
+    metadata:
+      labels:
+        app: ue2
+        slice: mmtc
+    spec:
+      containers:
+        - name: ue2
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: ue2-config
+              mountPath: /etc/ueransim/nr-ue.yaml
+              subPath: nr-ue.yaml
+            - name: ue2-config
+              mountPath: /usr/local/bin/ue-entrypoint.sh
+              subPath: ue-entrypoint.sh
+      volumes:
+        - name: ue2-config
+          configMap:
+            name: ue2-config
+            defaultMode: 0755
+---
+# ── UE3: URLLC — Ultra-Reliable Low-Latency Communications (SST=3) ──────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ue3-config
+  namespace: open5gs
+data:
+  nr-ue.yaml: |
+    supi: 'imsi-999700000000003'
+    mcc: '999'
+    mnc: '70'
+    protectionScheme: 0
+    homeNetworkPublicKey: '5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650'
+    homeNetworkPublicKeyId: 1
+    routingIndicator: '0000'
+
+    key: '465B5CE8B199B49FAA5F0A2EE238A6BC'
+    op: 'E8ED289DEBA952E4283B54E88E6183CA'
+    opType: 'OPC'
+    amf: '8000'
+    imei: '356938035643805'
+    imeiSv: '4370816125816153'
+
+    tunNetmask: '255.255.255.0'
+
+    gnbSearchList:
+      - gnb
+
+    uacAic:
+      mps: false
+      mcs: false
+
+    uacAcc:
+      normalClass: 0
+      class11: false
+      class12: false
+      class13: false
+      class14: false
+      class15: false
+
+    sessions:
+      - type: 'IPv4'
+        apn: 'urllc'         # URLLC DNN
+        slice:
+          sst: 3             # SST=3 → URLLC slice → 10.47.0.0/16
+
+    configured-nssai:
+      - sst: 3               # Only advertise URLLC slice
+
+    default-nssai:
+      - sst: 3
+        sd: 1
+
+    integrity:
+      IA1: true
+      IA2: true
+      IA3: true
+
+    ciphering:
+      EA1: true
+      EA2: true
+      EA3: true
+
+    integrityMaxRate:
+      uplink: 'full'
+      downlink: 'full'
+
+  ue-entrypoint.sh: |
+    #!/bin/sh
+    /usr/local/bin/nr-ue -c /etc/ueransim/nr-ue.yaml &
+    UE_PID=$!
+    echo "[ue3-entrypoint] waiting for uesimtun0..."
+    for i in $(seq 1 30); do
+        ip link show uesimtun0 >/dev/null 2>&1 && break
+        sleep 1
+    done
+    if ip link show uesimtun0 >/dev/null 2>&1; then
+        echo "[ue3-entrypoint] uesimtun0 up"
+        ip addr show uesimtun0 | grep 'inet '
+    else
+        echo "[ue3-entrypoint] WARNING: uesimtun0 not found"
+    fi
+    wait $UE_PID
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ue3
+  namespace: open5gs
+  labels:
+    app: ue3
+    slice: urllc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ue3
+  template:
+    metadata:
+      labels:
+        app: ue3
+        slice: urllc
+    spec:
+      containers:
+        - name: ue3
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: ue3-config
+              mountPath: /etc/ueransim/nr-ue.yaml
+              subPath: nr-ue.yaml
+            - name: ue3-config
+              mountPath: /usr/local/bin/ue-entrypoint.sh
+              subPath: ue-entrypoint.sh
+      volumes:
+        - name: ue3-config
+          configMap:
+            name: ue3-config
+            defaultMode: 0755

@@ -35,7 +35,9 @@ data:
         port: 38412
 
     slices:
-      - sst: 1
+      - sst: 1    # eMBB
+      - sst: 2    # mMTC
+      - sst: 3    # URLLC
 
     ignoreStreamIds: true
 
