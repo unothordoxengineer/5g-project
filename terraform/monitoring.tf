@@ -142,117 +142,55 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 ###############################################################################
-# AWS Managed Grafana (AMG)
+# Self-managed Grafana on EKS (Helm) — mirrors local Phase-4 setup
+# AWS Managed Grafana (AMG) requires SSO which is not available on this account.
 ###############################################################################
 
-resource "aws_grafana_workspace" "main" {
-  name                     = "${var.project_name}-amg"
-  account_access_type      = "CURRENT_ACCOUNT"
-  authentication_providers = ["AWS_SSO"]
-  permission_type          = "SERVICE_MANAGED"
-  grafana_version          = var.amg_grafana_version
-  role_arn                 = aws_iam_role.grafana.arn
-
-  data_sources              = ["PROMETHEUS", "CLOUDWATCH"]
-  notification_destinations = ["SNS"]
-
-  tags = {
-    Name = "${var.project_name}-amg"
-  }
-}
-
-# AMG IAM role
-data "aws_iam_policy_document" "grafana_assume" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["grafana.amazonaws.com"]
-    }
-  }
-}
-
-resource "aws_iam_role" "grafana" {
-  name               = "${var.project_name}-grafana-role"
-  assume_role_policy = data.aws_iam_policy_document.grafana_assume.json
-
-  tags = { Name = "${var.project_name}-grafana-role" }
-}
-
-resource "aws_iam_role_policy" "grafana_amp" {
-  name = "${var.project_name}-grafana-amp-access"
-  role = aws_iam_role.grafana.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "aps:ListWorkspaces",
-          "aps:DescribeWorkspace",
-          "aps:QueryMetrics",
-          "aps:GetLabels",
-          "aps:GetSeries",
-          "aps:GetMetricMetadata",
-        ]
-        Resource = aws_prometheus_workspace.main.arn
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:DescribeAlarmsForMetric",
-          "cloudwatch:DescribeAlarmHistory",
-          "cloudwatch:DescribeAlarms",
-          "cloudwatch:ListMetrics",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:GetMetricData",
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "sns:Publish"
-        ]
-        Resource = aws_sns_topic.alerts.arn
-      }
-    ]
-  })
-}
-
-# ── AMP data source wired to the Grafana workspace ───────────────────────────
-
-resource "aws_grafana_workspace_api_key" "amp_datasource" {
-  key_name        = "terraform-datasource-setup"
-  key_role        = "ADMIN"
-  seconds_to_live = 3600
-  workspace_id    = aws_grafana_workspace.main.id
-}
-
-###############################################################################
-# CloudWatch Container Insights — Helm chart
-# Installs the CloudWatch agent + Fluent Bit as a DaemonSet on EKS nodes
-###############################################################################
-
-resource "helm_release" "cloudwatch_agent" {
-  name       = "amazon-cloudwatch-observability"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "amazon-cloudwatch-observability"
-  namespace  = "amazon-cloudwatch"
-  version    = "1.4.0"
-
+resource "helm_release" "grafana" {
+  name             = "grafana"
+  repository       = "https://grafana.github.io/helm-charts"
+  chart            = "grafana"
+  namespace        = "monitoring"
+  version          = "7.3.9"
   create_namespace = true
 
   set {
-    name  = "clusterName"
-    value = var.cluster_name
+    name  = "adminPassword"
+    value = "admin"   # Override via values file or Secrets Manager in production
+  }
+
+  # AMP remote-read data source wired automatically
+  set {
+    name  = "datasources.datasources\\.yaml.apiVersion"
+    value = "1"
   }
   set {
-    name  = "region"
-    value = var.aws_region
+    name  = "datasources.datasources\\.yaml.datasources[0].name"
+    value = "AMP"
+  }
+  set {
+    name  = "datasources.datasources\\.yaml.datasources[0].type"
+    value = "prometheus"
+  }
+  set {
+    name  = "datasources.datasources\\.yaml.datasources[0].url"
+    value = aws_prometheus_workspace.main.prometheus_endpoint
+  }
+  set {
+    name  = "datasources.datasources\\.yaml.datasources[0].isDefault"
+    value = "true"
+  }
+  set {
+    name  = "service.type"
+    value = "ClusterIP"
   }
 
   depends_on = [module.eks]
 }
+
+# CloudWatch Container Insights helm chart commented out.
+# Chart "amazon-cloudwatch-observability" was removed from eks-charts repo.
+# Install manually after cluster is up:
+#   aws eks create-addon --cluster-name <cluster> --addon-name amazon-cloudwatch-observability
+# Or use the CloudWatch agent DaemonSet from:
+#   https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-EKS-quickstart.html

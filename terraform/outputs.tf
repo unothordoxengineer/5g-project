@@ -66,27 +66,12 @@ output "ecr_login_command" {
 
 # ── SageMaker ────────────────────────────────────────────────────────────────
 
-output "sagemaker_endpoint_names" {
-  description = "Map of model name → SageMaker endpoint name"
-  value       = { for name, ep in aws_sagemaker_endpoint.endpoints : name => ep.name }
-}
-
-output "sagemaker_endpoint_arns" {
-  description = "Map of model name → SageMaker endpoint ARN"
-  value       = { for name, ep in aws_sagemaker_endpoint.endpoints : name => ep.arn }
-}
-
-output "sagemaker_invoke_example" {
-  description = "Example AWS CLI command to invoke the anomaly-detector endpoint"
-  value = <<-EOT
-    aws sagemaker-runtime invoke-endpoint \
-      --endpoint-name ${var.project_name}-anomaly-detector \
-      --content-type application/json \
-      --body '{"cpu_upf":95.0,"upf_replicas":5,"cpu_amf":40.0}' \
-      --region ${var.aws_region} \
-      /tmp/response.json && cat /tmp/response.json
-  EOT
-}
+# SageMaker endpoint outputs commented out — endpoints not yet deployed.
+# Uncomment after pushing ECR images and re-enabling sagemaker.tf resources.
+#
+# output "sagemaker_endpoint_names" { ... }
+# output "sagemaker_endpoint_arns"  { ... }
+# output "sagemaker_invoke_example" { ... }
 
 # ── Monitoring ───────────────────────────────────────────────────────────────
 
@@ -100,14 +85,9 @@ output "amp_workspace_endpoint" {
   value       = "${aws_prometheus_workspace.main.prometheus_endpoint}api/v1/remote_write"
 }
 
-output "amg_workspace_url" {
-  description = "AWS Managed Grafana workspace URL"
-  value       = "https://${aws_grafana_workspace.main.endpoint}"
-}
-
-output "amg_workspace_id" {
-  description = "AWS Managed Grafana workspace ID"
-  value       = aws_grafana_workspace.main.id
+output "grafana_service_name" {
+  description = "Self-managed Grafana Helm release name (access via kubectl port-forward)"
+  value       = helm_release.grafana.name
 }
 
 # ── IAM ──────────────────────────────────────────────────────────────────────
@@ -134,7 +114,7 @@ output "deployment_summary" {
     ║  Region      : ${var.aws_region}
     ║  Nodes       : ${var.node_group_desired}x ${var.node_instance_type}
     ║  AMP         : ${aws_prometheus_workspace.main.id}
-    ║  AMG         : https://${aws_grafana_workspace.main.endpoint}
+    ║  Grafana     : kubectl port-forward svc/grafana 3000:80 -n monitoring
     ╠══════════════════════════════════════════════════════════╣
     ║  Next step:
     ║    aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.aws_region}

@@ -8,3 +8,11 @@ serving/__pycache__/
 # Synthetic / generated data — large CSV files; regenerate with:
 #   cd ml && /opt/homebrew/bin/python3 generate_synthetic_data.py
 data/synthetic/
+# Terraform
+terraform/tfplan
+terraform/.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Claude worktrees
+.claude/worktrees/

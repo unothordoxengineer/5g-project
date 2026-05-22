@@ -131,6 +131,20 @@ variable "sagemaker_container_image" {
   default     = ""   # Populated from ecr.tf output after first push
 }
 
+# ── NEF / API Layer ──────────────────────────────────────────────────────────
+
+variable "domain_name" {
+  description = "Base domain name used for Cognito resource server identifier (e.g. example.com)"
+  type        = string
+  default     = "5g-core.internal"
+}
+
+variable "common_tags" {
+  description = "Extra tags merged onto every taggable resource"
+  type        = map(string)
+  default     = {}
+}
+
 # ── Monitoring ───────────────────────────────────────────────────────────────
 
 variable "amp_retention_days" {

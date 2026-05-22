@@ -118,20 +118,12 @@ resource "aws_iam_role_policy" "node_amp_write" {
 # EKS OIDC provider (required for IRSA — IAM Roles for Service Accounts)
 ###############################################################################
 
-data "tls_certificate" "eks_oidc" {
-  url = module.eks.cluster_oidc_issuer_url
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
-  url             = module.eks.cluster_oidc_issuer_url
-
-  tags = { Name = "${var.project_name}-eks-oidc" }
-}
-
 ###############################################################################
 # IRSA — Cluster Autoscaler
+# Note: enable_irsa = true in module.eks already creates the OIDC provider
+# internally and exposes it as module.eks.oidc_provider_arn. No need to
+# create aws_iam_openid_connect_provider manually (would cause
+# ConcurrentModificationException competing with the module's creation).
 ###############################################################################
 
 data "aws_iam_policy_document" "cluster_autoscaler_assume" {
@@ -140,7 +132,7 @@ data "aws_iam_policy_document" "cluster_autoscaler_assume" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [module.eks.oidc_provider_arn]
     }
     condition {
       test     = "StringEquals"

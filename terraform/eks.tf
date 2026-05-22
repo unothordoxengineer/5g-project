@@ -6,6 +6,13 @@
 # remaining fully auditable.
 ###############################################################################
 
+# Give IAM roles time to propagate before EKS tries to use them.
+# Prevents ConcurrentModificationException on the OIDC provider during first apply.
+resource "time_sleep" "wait_for_iam" {
+  create_duration = "60s"
+  depends_on      = [aws_iam_role.eks_cluster]
+}
+
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -82,6 +89,8 @@ module "eks" {
   tags = {
     Name = var.cluster_name
   }
+
+  depends_on = [time_sleep.wait_for_iam]
 }
 
 ###############################################################################
@@ -94,7 +103,7 @@ data "aws_iam_policy_document" "ebs_csi_assume" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [module.eks.oidc_provider_arn]
     }
     condition {
       test     = "StringEquals"
@@ -206,7 +215,7 @@ data "aws_iam_policy_document" "aws_lbc_assume" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [module.eks.oidc_provider_arn]
     }
     condition {
       test     = "StringEquals"
