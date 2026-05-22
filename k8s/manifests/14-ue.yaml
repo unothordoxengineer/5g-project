@@ -119,8 +119,8 @@ spec:
     spec:
       containers:
         - name: ue
-          image: ueransim-ue:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
           ports: []
           resources:

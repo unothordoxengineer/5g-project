@@ -52,7 +52,7 @@ data:
     # UPF entrypoint — start open5gs-upfd then configure ogstun + NAT
 
     # Start UPF daemon in background
-    /usr/local/bin/open5gs-upfd -c /etc/open5gs/upf.yaml &
+    /opt/open5gs/bin/open5gs-upfd -c /etc/open5gs/upf.yaml &
     UPF_PID=$!
 
     # Wait for ogstun to appear (UPF creates it on startup)
@@ -92,11 +92,18 @@ spec:
       labels:
         app: upf
     spec:
+      hostNetwork: true   # UPF needs host netns for tun device creation
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: upf
-          image: open5gs-upf:latest
-          imagePullPolicy: Never
-          command: ["/bin/sh", "/usr/local/bin/upf-entrypoint.sh"]
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-upf:latest
+          imagePullPolicy: IfNotPresent
+          # Use gradiant entrypoint — creates ogstun via 'ip tuntap' (netlink) before
+          # running upfd, avoiding the direct TUNSETIFF ioctl that fails on EKS.
+          args:
+            - /opt/open5gs/bin/open5gs-upfd
+            - -c
+            - /etc/open5gs/upf.yaml
           ports:
             - containerPort: 8805
               protocol: UDP
@@ -115,14 +122,18 @@ spec:
               cpu: "1000m"
           securityContext:
             privileged: true          # NET_ADMIN + SYS_MODULE + iptables
+            runAsUser: 0              # root required for ip tuntap + iptables
             capabilities:
               add: ["NET_ADMIN", "SYS_MODULE"]
-          # Allow ip_forward inside the pod
           env:
-            - name: NODE_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
+            - name: IPV4_TUN_ADDR
+              value: "10.45.0.1/16"
+            - name: IPV6_TUN_ADDR
+              value: "2001:db8:cafe::1/48"
+            - name: IPV4_TUN_SUBNET
+              value: "10.45.0.0/16"
+            - name: ENABLE_NAT
+              value: "true"
           readinessProbe:
             exec:
               command: ["pgrep", "-x", "open5gs-upfd"]
@@ -137,9 +148,6 @@ spec:
             - name: upf-config
               mountPath: /etc/open5gs/upf.yaml
               subPath: upf.yaml
-            - name: upf-config
-              mountPath: /usr/local/bin/upf-entrypoint.sh
-              subPath: upf-entrypoint.sh
             - name: dev-net-tun
               mountPath: /dev/net/tun
       volumes:

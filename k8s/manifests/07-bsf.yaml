@@ -49,8 +49,19 @@ spec:
     spec:
       containers:
         - name: bsf
-          image: open5gs-bsf:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-bsf:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+          args:
+            - /opt/open5gs/bin/open5gs-bsfd
+            - -c
+            - /etc/open5gs/bsf.yaml
+          env:
+            - name: DB_URI
+              value: "mongodb://mongodb/open5gs"
           ports:
             - containerPort: 80
           resources:

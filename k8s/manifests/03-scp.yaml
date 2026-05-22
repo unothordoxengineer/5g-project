@@ -50,8 +50,16 @@ spec:
     spec:
       containers:
         - name: scp
-          image: open5gs-scp:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-scp:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+          args:
+            - /opt/open5gs/bin/open5gs-scpd
+            - -c
+            - /etc/open5gs/scp.yaml
           ports:
             - containerPort: 80
           resources:

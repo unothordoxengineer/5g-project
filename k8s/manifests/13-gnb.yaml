@@ -66,8 +66,8 @@ spec:
     spec:
       containers:
         - name: gnb
-          image: ueransim-gnb:latest
-          imagePullPolicy: Never
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-gnb:latest
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/gnb-entrypoint.sh"]
           env:
             - name: POD_IP
