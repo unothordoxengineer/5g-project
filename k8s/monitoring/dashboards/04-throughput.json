@@ -1,0 +1,123 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "GTP-U and data-plane throughput across all network slices",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"upf.*\"}[2m])",
+          "legendFormat": "{{pod}} RX (GTP-U downlink)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_transmit_bytes_total{namespace=\"open5gs\", pod=~\"upf.*\"}[2m])",
+          "legendFormat": "{{pod}} TX (GTP-U uplink)",
+          "refId": "B"
+        }
+      ],
+      "title": "UPF GTP-U Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"gnb.*\"}[2m])",
+          "legendFormat": "gNB RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_transmit_bytes_total{namespace=\"open5gs\", pod=~\"gnb.*\"}[2m])",
+          "legendFormat": "gNB TX",
+          "refId": "B"
+        }
+      ],
+      "title": "gNB N3 Interface Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2, "fillOpacity": 20 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue-.*|ue$.*\"}[2m])",
+          "legendFormat": "UE1 eMBB (SST=1) RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue2.*\"}[2m])",
+          "legendFormat": "UE2 mMTC (SST=2) RX",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue3.*\"}[2m])",
+          "legendFormat": "UE3 URLLC (SST=3) RX",
+          "refId": "C"
+        }
+      ],
+      "title": "Per-Slice Downlink Throughput — eMBB / mMTC / URLLC",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"open5gs\"}[2m]))",
+          "legendFormat": "Total cluster RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"open5gs\"}[2m]))",
+          "legendFormat": "Total cluster TX",
+          "refId": "B"
+        }
+      ],
+      "title": "Total 5G Core Data-Plane Throughput",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 36,
+  "tags": ["5g", "open5gs", "throughput", "gtpu"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "04 — GTP-U Throughput",
+  "uid": "throughput",
+  "version": 1
+}

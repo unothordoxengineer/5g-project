@@ -1,0 +1,127 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "HPA autoscaling activity for Open5GS UPF and other NFs",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 3 },
+            { "color": "red", "value": 5 }
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "{{horizontalpodautoscaler}} current",
+          "refId": "A"
+        }
+      ],
+      "title": "UPF Current Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "blue", "value": null }
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "{{horizontalpodautoscaler}} max",
+          "refId": "A"
+        }
+      ],
+      "title": "UPF Max Replicas",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "short" }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "current replicas",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "desired replicas",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "min replicas",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "max replicas",
+          "refId": "D"
+        }
+      ],
+      "title": "HPA Replica History — UPF",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "percentunit" }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_cpu_usage_seconds_total{namespace=\"open5gs\", pod=~\"upf.*\", container=\"upf\"}[2m])",
+          "legendFormat": "{{pod}} CPU rate",
+          "refId": "A"
+        }
+      ],
+      "title": "UPF CPU Usage (HPA trigger at 70%)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "tags": ["5g", "open5gs", "hpa", "autoscaling"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "03 — HPA Autoscaling",
+  "uid": "autoscaling",
+  "version": 1
+}

@@ -1,31 +1,24 @@
 # =============================================================================
-# kube-prometheus-stack Helm values for Open5GS Phase 4
+# kube-prometheus-stack Helm values for Open5GS Phase 8.5 (EKS + AMP)
 # Prometheus scrapes AMF/SMF/UPF/PCF native /metrics (port 9090)
 # kube-state-metrics covers all other NFs via pod/container metrics
+# remote_write → AWS Managed Prometheus (AMP) via IRSA SigV4 auth
 # =============================================================================
 
 fullnameOverride: prometheus
 
+# ── Grafana is deployed as standalone helm release (see monitoring.tf) ──────
 grafana:
-  enabled: true
-  adminPassword: open5gs
-  service:
-    type: ClusterIP
-    port: 80
-  grafana.ini:
-    server:
-      root_url: http://localhost:3000
-  sidecar:
-    dashboards:
-      enabled: true
-      label: grafana_dashboard
-      labelValue: "1"
-      folder: /var/lib/grafana/dashboards/open5gs
-      searchNamespace: ALL
-  persistence:
-    enabled: false
+  enabled: false
 
+# ── Prometheus ───────────────────────────────────────────────────────────────
 prometheus:
+  serviceAccount:
+    name: prometheus
+    annotations:
+      # IRSA: allows Prometheus pod to assume AMP write role without access keys
+      eks.amazonaws.com/role-arn: "arn:aws:iam::749534910877:role/5g-core-prometheus-amp-role"
+
   prometheusSpec:
     # Scrape interval — fine-grained for HPA triggering visibility
     scrapeInterval: 15s
@@ -50,6 +43,16 @@ prometheus:
             requests:
               storage: 5Gi
 
+    # ── AMP remote_write via SigV4 (IRSA — no access keys needed) ───────────
+    remoteWrite:
+      - url: "https://aps-workspaces.us-east-1.amazonaws.com/workspaces/ws-6f6aefa7-9c99-423a-afc3-65ef0832f154/api/v1/remote_write"
+        sigv4:
+          region: us-east-1
+        queueConfig:
+          maxSamplesPerSend: 1000
+          maxShards: 200
+          capacity: 2500
+
 alertmanager:
   alertmanagerSpec:
     resources:
@@ -65,7 +68,7 @@ kube-state-metrics:
 nodeExporter:
   enabled: true
 
-# Disable components not needed in kind
+# Disable EKS managed control-plane components (not scrapeable)
 kubeEtcd:
   enabled: false
 kubeControllerManager:

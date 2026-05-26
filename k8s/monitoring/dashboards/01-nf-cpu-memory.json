@@ -1,0 +1,120 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "Open5GS Network Function CPU and Memory Usage",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_cpu_usage_seconds_total{namespace=\"open5gs\", container!=\"\", container!=\"POD\"}[2m])",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "title": "NF CPU Usage (rate 2m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "container_memory_working_set_bytes{namespace=\"open5gs\", container!=\"\", container!=\"POD\"}",
+          "legendFormat": "{{pod}} / {{container}}",
+          "refId": "A"
+        }
+      ],
+      "title": "NF Memory Working Set",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 0.8 }
+          ]}
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "displayMode": "gradient" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_cpu_usage_seconds_total{namespace=\"open5gs\", container!=\"\", container!=\"POD\"}[2m]) / on(pod, container) kube_pod_container_resource_limits{namespace=\"open5gs\", resource=\"cpu\"}",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "NF CPU % of Limit",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.6 },
+            { "color": "red", "value": 0.85 }
+          ]}
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "displayMode": "gradient" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "container_memory_working_set_bytes{namespace=\"open5gs\", container!=\"\", container!=\"POD\"} / on(pod, container) kube_pod_container_resource_limits{namespace=\"open5gs\", resource=\"memory\"}",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ],
+      "title": "NF Memory % of Limit",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "tags": ["5g", "open5gs", "nf"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "01 — NF CPU & Memory",
+  "uid": "nf-cpu-memory",
+  "version": 1
+}

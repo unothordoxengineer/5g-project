@@ -1,0 +1,125 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": { "list": [] },
+  "description": "UE Registration Sessions and PDU Session State per Network Slice",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "green", "value": 1 }
+          ]},
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"open5gs\", deployment=~\"ue.*\"}",
+          "legendFormat": "{{deployment}}",
+          "refId": "A"
+        }
+      ],
+      "title": "UE Pods Ready",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "short" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 2,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"open5gs\"}",
+          "legendFormat": "{{deployment}} ready",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "kube_deployment_spec_replicas{namespace=\"open5gs\"}",
+          "legendFormat": "{{deployment}} desired",
+          "refId": "B"
+        }
+      ],
+      "title": "All NF Pod Readiness (open5gs namespace)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 3,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue.*\"}[2m])",
+          "legendFormat": "{{pod}} RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_transmit_bytes_total{namespace=\"open5gs\", pod=~\"ue.*\"}[2m])",
+          "legendFormat": "{{pod}} TX",
+          "refId": "B"
+        }
+      ],
+      "title": "UE Network Throughput (all slices)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "AMP" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2 }, "unit": "Bps" }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 4,
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue$.*\"}[2m])",
+          "legendFormat": "UE1 eMBB SST=1 RX",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue2.*\"}[2m])",
+          "legendFormat": "UE2 mMTC SST=2 RX",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "AMP" },
+          "expr": "rate(container_network_receive_bytes_total{namespace=\"open5gs\", pod=~\"ue3.*\"}[2m])",
+          "legendFormat": "UE3 URLLC SST=3 RX",
+          "refId": "C"
+        }
+      ],
+      "title": "Per-Slice Throughput — eMBB / mMTC / URLLC",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 36,
+  "tags": ["5g", "open5gs", "ue", "slicing"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "02 — UE Sessions & Slices",
+  "uid": "ue-sessions",
+  "version": 1
+}
