@@ -19,9 +19,15 @@ closed-loop pod (open5gs ns)
 |---|---|
 | IAM execution role | `arn:aws:iam::749534910877:role/5g-core-sagemaker-role` |
 | S3 model bucket | `s3://5g-core-ml-models-749534910877` |
-| Container image | `683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3` |
+| Container image | `749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ml-inference:sklearn-1.8.0` |
 | Instance type | `ml.t2.medium` (1 per endpoint) |
 | Region | `us-east-1` |
+
+> **Note on container:** AWS's built-in `sagemaker-scikit-learn:1.2-1-cpu-py3` only supports
+> sklearn ≤1.2. Models were trained with sklearn 1.8.0 (adds `missing_go_to_left` to tree
+> node dtype). A custom BYOC container (`sagemaker/byoc/`) was built with sklearn 1.8.0
+> and the SageMaker BYOC interface (Flask on port 8080, /ping + /invocations).
+> Built with `--provenance=false` to produce Docker v2.2 manifest (SageMaker rejects OCI index).
 
 ## Endpoints
 
