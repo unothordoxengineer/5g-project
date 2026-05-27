@@ -14,19 +14,16 @@ import joblib
 import numpy as np
 
 
-# Must match clustering_meta.json order exactly
+# Discriminative features used by the scaler at training time (19 total):
+# cpu_cols_all (14 NF CPU cols, no rolling) + scalar_cols (5 throughput/replica cols)
+# Source: run_all_models.py: disc_cols = cpu_cols_all + scalar_cols
 FEATURES = [
+    # 14 per-NF CPU columns (no rolling, no memory)
     "cpu_amf","cpu_ausf","cpu_bsf","cpu_gnb","cpu_mongodb",
     "cpu_nrf","cpu_nssf","cpu_pcf","cpu_scp","cpu_smf",
     "cpu_udm","cpu_udr","cpu_ue","cpu_upf",
-    "mem_amf","mem_ausf","mem_bsf","mem_gnb","mem_mongodb",
-    "mem_nrf","mem_nssf","mem_pcf","mem_scp","mem_smf",
-    "mem_udm","mem_udr","mem_ue","mem_upf",
-    "upf_replicas","gtp_in_pps","gtp_out_pps","ran_ue_count",
-    "cpu_amf_roll5m","cpu_amf_roll5std",
-    "cpu_ausf_roll5m","cpu_ausf_roll5std",
-    "cpu_bsf_roll5m","cpu_bsf_roll5std",
-    "hpa_delta",
+    # 5 scalar columns
+    "upf_replicas","gtp_in_pps","gtp_out_pps","ran_ue_count","hpa_delta",
 ]
 
 CLUSTER_STATES = {
