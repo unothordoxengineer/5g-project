@@ -49,6 +49,10 @@ else
     echo "      Deleted: $NAT_ID"
   done
   echo "      Saves ~\$2.16/day (2× NAT gateways at \$0.045/hr each)"
+  # Remove from Terraform state so aws-start.sh can recreate cleanly
+  TF_DIR="$(cd "$(dirname "$0")/../terraform" && pwd)"
+  (cd "$TF_DIR" && terraform state rm 'aws_nat_gateway.main[0]' 'aws_nat_gateway.main[1]' 2>/dev/null && \
+    echo "      Terraform state cleaned up (NAT GW entries removed)") || true
 fi
 
 # ── 3. Disable CloudWatch Container Insights ─────────────────────────────────

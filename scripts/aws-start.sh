@@ -19,7 +19,8 @@ echo ""
 echo "[1/6] Re-creating NAT gateways via Terraform..."
 echo "      (NAT gateways were deleted to save cost — Terraform recreates them)"
 cd "$TF_DIR"
-terraform apply -target=aws_nat_gateway.nat -auto-approve 2>&1 | tail -5
+terraform state rm 'aws_nat_gateway.main[0]' 'aws_nat_gateway.main[1]' 2>/dev/null || true
+terraform apply -target='aws_nat_gateway.main[0]' -target='aws_nat_gateway.main[1]' -auto-approve 2>&1 | tail -5
 echo "      NAT gateways ready."
 cd - >/dev/null
 

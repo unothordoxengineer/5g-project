@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """
-closed_loop.py — Phase 7 Closed-Loop Automation Engine
-=======================================================
+closed_loop.py — Phase 8.6 Closed-Loop Automation Engine (SageMaker edition)
+=============================================================================
 Runs permanently in the cluster, polling every 30 s:
 
   1. Query Prometheus for current UPF CPU, replicas, latency
-  2. POST /predict/anomaly — if anomaly detected, scale UPF
-  3. POST /predict/forecast — if >150 UEs predicted in next hour, pre-scale to 3
-  4. POST /predict/cluster  — log network state
+  2. Invoke SageMaker anomaly-detector-endpoint — if anomaly detected, scale UPF
+  3. Invoke SageMaker traffic-forecaster-endpoint — if >150 UEs predicted, pre-scale to 3
+  4. Invoke SageMaker state-classifier-endpoint  — log network state
   5. Write structured event log to /logs/closed_loop.log
 
 Log format:
   [TIMESTAMP] DETECT: anomaly_score=0.72 → DECIDE: scale needed → ACT: UPF scaled to 3 replicas
 
 Environment variables:
-  PROMETHEUS_URL    default: http://prometheus-kube-prometheus-prometheus.monitoring:9090
-  SERVING_API_URL   default: http://ml-serving-api.open5gs:80
-  POLL_INTERVAL_S   default: 30
-  LOG_FILE          default: /logs/closed_loop.log
-  NAMESPACE         default: open5gs
-  DRY_RUN           default: false  (set to "true" to log without acting)
+  PROMETHEUS_URL        default: http://prometheus-kube-prometheus-prometheus.monitoring:9090
+  ANOMALY_ENDPOINT      default: anomaly-detector-endpoint
+  FORECAST_ENDPOINT     default: traffic-forecaster-endpoint
+  CLASSIFIER_ENDPOINT   default: state-classifier-endpoint
+  AWS_REGION            default: us-east-1
+  POLL_INTERVAL_S       default: 30
+  LOG_FILE              default: /logs/closed_loop.log
+  NAMESPACE             default: open5gs
+  DRY_RUN               default: false  (set to "true" to log without acting)
 """
 
 import os
@@ -34,15 +37,23 @@ import urllib.parse
 import urllib.error
 from datetime import datetime, timezone
 
+import boto3
+from botocore.exceptions import ClientError
+
 # ── Configuration ─────────────────────────────────────────────────────────────
-PROMETHEUS_URL  = os.environ.get("PROMETHEUS_URL",
+PROMETHEUS_URL      = os.environ.get("PROMETHEUS_URL",
     "http://prometheus-kube-prometheus-prometheus.monitoring:9090")
-SERVING_API_URL = os.environ.get("SERVING_API_URL",
-    "http://ml-serving-api.open5gs:80")
-POLL_INTERVAL   = int(os.environ.get("POLL_INTERVAL_S", "30"))
-LOG_FILE        = os.environ.get("LOG_FILE", "/logs/closed_loop.log")
-NAMESPACE       = os.environ.get("NAMESPACE", "open5gs")
-DRY_RUN         = os.environ.get("DRY_RUN", "false").lower() == "true"
+ANOMALY_ENDPOINT    = os.environ.get("ANOMALY_ENDPOINT",
+    "anomaly-detector-endpoint")
+FORECAST_ENDPOINT   = os.environ.get("FORECAST_ENDPOINT",
+    "traffic-forecaster-endpoint")
+CLASSIFIER_ENDPOINT = os.environ.get("CLASSIFIER_ENDPOINT",
+    "state-classifier-endpoint")
+AWS_REGION          = os.environ.get("AWS_REGION", "us-east-1")
+POLL_INTERVAL       = int(os.environ.get("POLL_INTERVAL_S", "30"))
+LOG_FILE            = os.environ.get("LOG_FILE", "/logs/closed_loop.log")
+NAMESPACE           = os.environ.get("NAMESPACE", "open5gs")
+DRY_RUN             = os.environ.get("DRY_RUN", "false").lower() == "true"
 
 # Scaling thresholds
 SCALE_MIN       = 1
@@ -62,6 +73,16 @@ logging.basicConfig(
     ],
 )
 log = logging.getLogger("closed-loop")
+
+# ── SageMaker runtime client ──────────────────────────────────────────────────
+_smr = None
+
+def get_smr():
+    global _smr
+    if _smr is None:
+        _smr = boto3.client("sagemaker-runtime", region_name=AWS_REGION)
+    return _smr
+
 
 def now_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -86,9 +107,7 @@ def prom_scalar(query: str, default: float = float('nan')) -> float:
     return default
 
 def get_current_metrics() -> dict:
-    """Collect UPF CPU%, replica count, latency from Prometheus."""
-    upf_pod_query = 'kube_pod_info{namespace="open5gs",pod=~"upf.*"}'
-
+    """Collect UPF CPU%, replica count, restarts from Prometheus."""
     cpu = prom_scalar(
         'sum(rate(container_cpu_usage_seconds_total{namespace="open5gs",'
         'pod=~"upf.*",container="upf"}[1m])) * 100'
@@ -103,30 +122,30 @@ def get_current_metrics() -> dict:
     )
 
     return {
-        "cpu_upf_pct":    cpu      if not math.isnan(cpu)      else 0.0,
-        "upf_replicas":   replicas if not math.isnan(replicas) else 1.0,
-        "pod_restarts":   restarts if not math.isnan(restarts) else 0.0,
+        "cpu_upf_pct":  cpu      if not math.isnan(cpu)      else 0.0,
+        "upf_replicas": replicas if not math.isnan(replicas) else 1.0,
+        "pod_restarts": restarts if not math.isnan(restarts) else 0.0,
     }
 
-# ── Serving API calls ─────────────────────────────────────────────────────────
-def api_post(path: str, payload: dict) -> dict | None:
-    """POST to the serving API; return parsed JSON or None on error."""
-    url  = f"{SERVING_API_URL}{path}"
-    body = json.dumps(payload).encode()
-    req  = urllib.request.Request(url, data=body,
-                                   headers={"Content-Type": "application/json"})
+# ── SageMaker invocations ─────────────────────────────────────────────────────
+def sagemaker_invoke(endpoint_name: str, payload: dict) -> dict | None:
+    """Invoke a SageMaker endpoint; return parsed JSON or None on error."""
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        log.warning(f"API {path} HTTP {e.code}: {e.read().decode()[:200]}")
+        resp = get_smr().invoke_endpoint(
+            EndpointName=endpoint_name,
+            ContentType="application/json",
+            Accept="application/json",
+            Body=json.dumps(payload).encode(),
+        )
+        return json.loads(resp["Body"].read())
+    except ClientError as e:
+        log.warning(f"SageMaker {endpoint_name} ClientError: {e.response['Error']['Message']}")
     except Exception as e:
-        log.warning(f"API {path} error: {e}")
+        log.warning(f"SageMaker {endpoint_name} error: {e}")
     return None
 
 # ── Kubectl actions ───────────────────────────────────────────────────────────
 def get_current_replicas() -> int:
-    """Read current UPF deployment replica count via kubectl."""
     try:
         out = subprocess.check_output(
             ["kubectl", "get", "deployment", "upf", "-n", NAMESPACE,
@@ -138,7 +157,6 @@ def get_current_replicas() -> int:
         return -1
 
 def scale_upf(replicas: int) -> bool:
-    """Scale UPF deployment to the given replica count."""
     replicas = max(SCALE_MIN, min(SCALE_MAX, replicas))
     if DRY_RUN:
         log.info(f"  [DRY-RUN] would scale UPF to {replicas} replicas")
@@ -157,7 +175,7 @@ def scale_upf(replicas: int) -> bool:
 
 # ── Forecast history (rolling buffer for ARIMA input) ────────────────────────
 _ue_history: list[float] = []
-_MAX_HISTORY = 24  # keep last 24 samples (12 min at 30 s polling)
+_MAX_HISTORY = 24   # keep last 24 samples (12 min at 30 s polling)
 
 def push_ue_sample(ue_count: float):
     _ue_history.append(ue_count)
@@ -172,10 +190,10 @@ def run_once():
     metrics = get_current_metrics()
     cpu     = metrics["cpu_upf_pct"]
     reps    = int(metrics["upf_replicas"])
-    push_ue_sample(cpu)   # use CPU% as UE-count proxy when actual count unavailable
+    push_ue_sample(cpu)   # use CPU% as UE-count proxy
 
-    # 2 ── Anomaly detection
-    anom_result = api_post("/predict/anomaly", {
+    # 2 ── Anomaly detection via SageMaker
+    anom_result = sagemaker_invoke(ANOMALY_ENDPOINT, {
         "cpu_upf":      cpu,
         "upf_replicas": reps,
         "cpu_amf":      0.0,
@@ -188,7 +206,7 @@ def run_once():
 
         if is_anom:
             target_reps = min(SCALE_MAX, cur_reps + 1) if cur_reps > 0 else SCALE_MAX
-            scaled      = scale_upf(target_reps)
+            scale_upf(target_reps)
             event(
                 detect=f"anomaly_score={score:.3f} cpu={cpu:.1f}% replicas={reps}",
                 decide="anomaly detected — scale UPF up",
@@ -202,21 +220,23 @@ def run_once():
             )
     else:
         event(
-            detect=f"cpu={cpu:.1f}% replicas={reps} (serving API unreachable)",
+            detect=f"cpu={cpu:.1f}% replicas={reps} (SageMaker unreachable)",
             decide="cannot determine anomaly status",
             act="none — will retry",
         )
 
     # 3 ── Forecast-based pre-scaling (only if we have enough history)
     if len(_ue_history) >= 6:
-        fc_result = api_post("/predict/forecast", {"sessions": list(_ue_history[-12:])})
+        fc_result = sagemaker_invoke(FORECAST_ENDPOINT, {
+            "sessions": list(_ue_history[-12:])
+        })
         if fc_result:
             fc6      = fc_result["forecast_6h"]
             max_fc   = max(fc6) if fc6 else 0
             cur_reps = get_current_replicas()
 
             if max_fc > FORECAST_THRESH and cur_reps < PROACTIVE_REPS:
-                scaled = scale_upf(PROACTIVE_REPS)
+                scale_upf(PROACTIVE_REPS)
                 event(
                     detect=f"forecast_max={max_fc:.0f} UEs (threshold={FORECAST_THRESH})",
                     decide=f"high load predicted — pre-scale to {PROACTIVE_REPS}",
@@ -230,7 +250,7 @@ def run_once():
                 )
 
     # 4 ── Network state classification
-    cluster_result = api_post("/predict/cluster", {
+    cluster_result = sagemaker_invoke(CLASSIFIER_ENDPOINT, {
         "cpu_upf":      cpu,
         "cpu_amf":      0.0,
         "upf_replicas": reps,
@@ -242,12 +262,15 @@ def run_once():
 
 
 def main():
-    log.info(f"[{now_str()}] Closed-loop engine starting")
-    log.info(f"  Prometheus : {PROMETHEUS_URL}")
-    log.info(f"  Serving API: {SERVING_API_URL}")
-    log.info(f"  Poll every : {POLL_INTERVAL}s")
-    log.info(f"  Dry-run    : {DRY_RUN}")
-    log.info(f"  Log file   : {LOG_FILE}")
+    log.info(f"[{now_str()}] Closed-loop engine starting (SageMaker mode)")
+    log.info(f"  Prometheus          : {PROMETHEUS_URL}")
+    log.info(f"  Anomaly endpoint    : {ANOMALY_ENDPOINT}")
+    log.info(f"  Forecast endpoint   : {FORECAST_ENDPOINT}")
+    log.info(f"  Classifier endpoint : {CLASSIFIER_ENDPOINT}")
+    log.info(f"  Region              : {AWS_REGION}")
+    log.info(f"  Poll every          : {POLL_INTERVAL}s")
+    log.info(f"  Dry-run             : {DRY_RUN}")
+    log.info(f"  Log file            : {LOG_FILE}")
 
     consecutive_errors = 0
     while True:

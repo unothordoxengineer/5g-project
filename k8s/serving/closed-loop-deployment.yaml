@@ -4,6 +4,9 @@ kind: ServiceAccount
 metadata:
   name: closed-loop-sa
   namespace: open5gs
+  annotations:
+    # IRSA: allows this SA to call sagemaker:InvokeEndpoint via web identity
+    eks.amazonaws.com/role-arn: "arn:aws:iam::749534910877:role/5g-core-closed-loop-sa-role"
 
 ---
 # RBAC: closed-loop engine may only scale the UPF deployment (resourceNames scoped)
@@ -14,7 +17,7 @@ metadata:
   name: closed-loop-role
   namespace: open5gs
   annotations:
-    security.open5gs/last-reviewed: "2026-05-02"
+    security.open5gs/last-reviewed: "2026-05-27"
     security.open5gs/reason: "Scoped to upf only — closed-loop engine must not patch other NF deployments"
 rules:
   - apiGroups: ["apps"]
@@ -52,7 +55,7 @@ metadata:
   namespace: open5gs
   labels:
     app: closed-loop-engine
-    phase: "7"
+    phase: "8.6"
 spec:
   replicas: 1
   selector:
@@ -64,21 +67,21 @@ spec:
         app: closed-loop-engine
     spec:
       serviceAccountName: closed-loop-sa
-      # Pin to open5gs-worker so the closed-loop engine is co-located with
-      # ml-serving-api, avoiding cross-node pod-IP routing on KinD/Docker-Mac
-      # where the Docker bridge drops NEW connections between nodes for pods
-      # that lack active conntrack entries (known Docker-for-Mac limitation).
-      nodeSelector:
-        kubernetes.io/hostname: open5gs-worker
       containers:
         - name: closed-loop
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/5g-closed-loop:latest
-          imagePullPolicy: IfNotPresent
+          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/closed-loop:latest
+          imagePullPolicy: Always
           env:
             - name: PROMETHEUS_URL
-              value: "http://prometheus-prometheus.monitoring:9090"
-            - name: SERVING_API_URL
-              value: "http://ml-serving-api.open5gs:80"
+              value: "http://prometheus-kube-prometheus-prometheus.monitoring:9090"
+            - name: ANOMALY_ENDPOINT
+              value: "anomaly-detector-endpoint"
+            - name: FORECAST_ENDPOINT
+              value: "traffic-forecaster-endpoint"
+            - name: CLASSIFIER_ENDPOINT
+              value: "state-classifier-endpoint"
+            - name: AWS_REGION
+              value: "us-east-1"
             - name: POLL_INTERVAL_S
               value: "30"
             - name: NAMESPACE
@@ -93,10 +96,10 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "64Mi"
+              memory: "128Mi"
             limits:
               cpu: "200m"
-              memory: "256Mi"
+              memory: "512Mi"
       volumes:
         - name: logs
           emptyDir: {}
