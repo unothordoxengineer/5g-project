@@ -135,6 +135,7 @@ class BedrockNetworkAdvisor:
         if system:
             body["system"] = system
 
+        last_error = ""
         for model_id in [BEDROCK_PRIMARY_MODEL, BEDROCK_FALLBACK_MODEL]:
             try:
                 self._stats["invocations"] += 1
@@ -152,15 +153,15 @@ class BedrockNetworkAdvisor:
                 code = e.response["Error"]["Code"]
                 msg  = e.response["Error"]["Message"]
                 self._stats["failures"] += 1
+                last_error = f"{code}: {msg}"
                 log.warning(f"[BEDROCK] {model_id} ClientError {code}: {msg}")
-                if model_id == BEDROCK_FALLBACK_MODEL:
-                    raise
             except Exception as e:
                 self._stats["failures"] += 1
+                last_error = str(e)
                 log.warning(f"[BEDROCK] {model_id} error: {e}")
-                if model_id == BEDROCK_FALLBACK_MODEL:
-                    raise
-        return ""  # unreachable, but satisfies type checker
+
+        # Both models failed — return sentinel so callers can degrade gracefully
+        return f"__BEDROCK_UNAVAILABLE__: {last_error}"
 
     # ── S3 helpers ─────────────────────────────────────────────────────────────
     def _save_report(self, content: str, prefix: str, extension: str = "md") -> str:
@@ -249,25 +250,37 @@ Return ONLY this JSON (no markdown, no explanation outside the JSON):
 
         raw = self._invoke(prompt, system=system, max_tokens=800)
 
-        try:
-            # Strip any accidental markdown fences
-            clean = raw.strip()
-            if clean.startswith("```"):
-                clean = "\n".join(clean.split("\n")[1:])
-            if clean.endswith("```"):
-                clean = "\n".join(clean.split("\n")[:-1])
-            analysis = json.loads(clean.strip())
-        except json.JSONDecodeError:
-            log.warning("[BEDROCK] analyse_network_event: non-JSON response, wrapping")
+        if raw.startswith("__BEDROCK_UNAVAILABLE__"):
+            log.warning("[BEDROCK] analyse_network_event: model unavailable")
             analysis = {
-                "root_cause": raw[:500],
+                "root_cause": "Bedrock model unavailable — enable model access in AWS Console.",
                 "severity_assessment": event.severity,
-                "immediate_actions": ["Check pod logs", "Verify Prometheus metrics"],
-                "preventive_measures": ["Monitor closely"],
-                "estimated_impact": "Unknown — manual review required",
-                "confidence": 0.5,
+                "immediate_actions": ["Check pod logs", "Verify Prometheus metrics", "Enable Bedrock model access"],
+                "preventive_measures": ["Enable Bedrock model access in AWS Console"],
+                "estimated_impact": "Unknown — Bedrock AI unavailable",
+                "confidence": 0.0,
                 "recommended_scale_target": None,
             }
+        else:
+            try:
+                # Strip any accidental markdown fences
+                clean = raw.strip()
+                if clean.startswith("```"):
+                    clean = "\n".join(clean.split("\n")[1:])
+                if clean.endswith("```"):
+                    clean = "\n".join(clean.split("\n")[:-1])
+                analysis = json.loads(clean.strip())
+            except json.JSONDecodeError:
+                log.warning("[BEDROCK] analyse_network_event: non-JSON response, wrapping")
+                analysis = {
+                    "root_cause": raw[:500],
+                    "severity_assessment": event.severity,
+                    "immediate_actions": ["Check pod logs", "Verify Prometheus metrics"],
+                    "preventive_measures": ["Monitor closely"],
+                    "estimated_impact": "Unknown — manual review required",
+                    "confidence": 0.5,
+                    "recommended_scale_target": None,
+                }
 
         analysis["timestamp"]  = event.timestamp
         analysis["event_type"] = event.event_type
@@ -366,19 +379,30 @@ Return ONLY this JSON:
 
         raw = self._invoke(prompt, system=system, max_tokens=600)
 
-        try:
-            clean = raw.strip().strip("```json").strip("```").strip()
-            plan = json.loads(clean)
-        except json.JSONDecodeError:
+        if raw.startswith("__BEDROCK_UNAVAILABLE__"):
             plan = {
                 "recommendation": "maintain",
-                "target_replicas": 1,
-                "reasoning": raw[:300],
+                "target_replicas": max(1, round(fc_max / 100)),
+                "reasoning": "Bedrock AI unavailable — using heuristic: 1 replica per 100 peak UEs.",
                 "risk_level": "medium",
-                "pre_scale_window": "immediately",
+                "pre_scale_window": "immediately" if fc_max > 150 else "scheduled",
                 "cost_impact": "unknown",
-                "confidence": 0.5,
+                "confidence": 0.0,
             }
+        else:
+            try:
+                clean = raw.strip().strip("```json").strip("```").strip()
+                plan = json.loads(clean)
+            except json.JSONDecodeError:
+                plan = {
+                    "recommendation": "maintain",
+                    "target_replicas": 1,
+                    "reasoning": raw[:300],
+                    "risk_level": "medium",
+                    "pre_scale_window": "immediately",
+                    "cost_impact": "unknown",
+                    "confidence": 0.5,
+                }
 
         plan["forecast_peak"]   = fc_max
         plan["forecast_avg"]    = fc_avg
@@ -445,19 +469,30 @@ Return ONLY this JSON:
 
         raw = self._invoke(prompt, system=system, max_tokens=700)
 
-        try:
-            clean = raw.strip().strip("```json").strip("```").strip()
-            summary = json.loads(clean)
-        except json.JSONDecodeError:
+        if raw.startswith("__BEDROCK_UNAVAILABLE__"):
             summary = {
                 "overall_grade": "B",
-                "headline": "Daily operations completed",
-                "highlights": ["System operational"],
-                "concerns": [],
-                "tomorrow_focus": ["Continue monitoring"],
+                "headline": f"System operational — {dm.get('total_anomalies', 0)} anomalies, {dm.get('uptime_pct', 100):.2f}% uptime",
+                "highlights": [f"Uptime: {dm.get('uptime_pct', 100):.2f}%", f"Peak CPU: {dm.get('max_cpu_upf', 0):.1f}%"],
+                "concerns": ["Enable Bedrock model access for AI-generated insights"] if dm.get("total_anomalies", 0) == 0 else [f"{dm.get('total_anomalies')} anomalies detected today"],
+                "tomorrow_focus": ["Monitor UPF CPU trends", "Review anomaly patterns"],
                 "capacity_trend": "stable",
-                "ai_assist_value": raw[:200],
+                "ai_assist_value": "Bedrock AI unavailable — enable model access in AWS Console.",
             }
+        else:
+            try:
+                clean = raw.strip().strip("```json").strip("```").strip()
+                summary = json.loads(clean)
+            except json.JSONDecodeError:
+                summary = {
+                    "overall_grade": "B",
+                    "headline": "Daily operations completed",
+                    "highlights": ["System operational"],
+                    "concerns": [],
+                    "tomorrow_focus": ["Continue monitoring"],
+                    "capacity_trend": "stable",
+                    "ai_assist_value": raw[:200],
+                }
 
         summary["date"]           = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         summary["raw_metrics"]    = dm
@@ -506,7 +541,10 @@ QUESTION: {question}
 
 Answer in plain English (3-5 sentences). Be specific and use the metric values provided."""
 
-        return self._invoke(prompt, system=system, max_tokens=400)
+        result = self._invoke(prompt, system=system, max_tokens=400)
+        if result.startswith("__BEDROCK_UNAVAILABLE__"):
+            return "Bedrock AI unavailable — enable model access in AWS Console to use natural language queries."
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     def get_network_health_score(self, metrics: dict) -> dict:
@@ -575,6 +613,8 @@ Answer in plain English (3-5 sentences). Be specific and use the metric values p
         ai_text = ""
         try:
             ai_text = self._invoke(prompt, max_tokens=250)
+            if ai_text.startswith("__BEDROCK_UNAVAILABLE__"):
+                ai_text = "AI insight unavailable — enable Bedrock model access in AWS Console."
         except Exception:
             ai_text = "AI insight unavailable."
 
@@ -660,17 +700,38 @@ Return ONLY this JSON:
 
         raw = self._invoke(prompt, system=system, max_tokens=1200)
 
-        try:
-            clean = raw.strip().strip("```json").strip("```").strip()
-            predictions = json.loads(clean)
-        except json.JSONDecodeError:
-            log.warning("[BEDROCK] predict_maintenance: non-JSON response")
+        if raw.startswith("__BEDROCK_UNAVAILABLE__"):
+            log.warning("[BEDROCK] predict_maintenance: model unavailable — using heuristics")
+            def _heuristic(nf: str) -> dict:
+                m = nf_metrics.get(nf, {})
+                cpu = m.get("cpu_pct", 0)
+                restarts = m.get("restarts", 0)
+                urgency = "high" if restarts > 3 else ("medium" if cpu > 70 else "low" if cpu > 50 else "none")
+                return {
+                    "maintenance_urgency": urgency,
+                    "estimated_hours_to_failure": None,
+                    "recommended_action": "monitor",
+                    "maintenance_window": "scheduled",
+                    "reasoning": f"Heuristic: CPU={cpu:.1f}%, restarts={restarts}",
+                }
             predictions = {
-                "predictions"             : {nf: {"maintenance_urgency": "none", "recommended_action": "monitor"} for nf in NETWORK_FUNCTIONS},
-                "critical_nfs"            : [],
+                "predictions"             : {nf: _heuristic(nf) for nf in NETWORK_FUNCTIONS},
+                "critical_nfs"            : [nf for nf in NETWORK_FUNCTIONS if nf_metrics.get(nf, {}).get("restarts", 0) > 3],
                 "next_maintenance_window" : "scheduled",
                 "overall_fleet_health"    : "healthy",
             }
+        else:
+            try:
+                clean = raw.strip().strip("```json").strip("```").strip()
+                predictions = json.loads(clean)
+            except json.JSONDecodeError:
+                log.warning("[BEDROCK] predict_maintenance: non-JSON response")
+                predictions = {
+                    "predictions"             : {nf: {"maintenance_urgency": "none", "recommended_action": "monitor"} for nf in NETWORK_FUNCTIONS},
+                    "critical_nfs"            : [],
+                    "next_maintenance_window" : "scheduled",
+                    "overall_fleet_health"    : "healthy",
+                }
 
         predictions["generated_at"] = datetime.now(timezone.utc).isoformat()
         predictions["nf_metrics"]   = nf_metrics
@@ -798,24 +859,45 @@ Return ONLY this JSON:
 
         raw = self._invoke(prompt, system=system, max_tokens=1500)
 
-        try:
-            clean = raw.strip().strip("```json").strip("```").strip()
-            report = json.loads(clean)
-        except json.JSONDecodeError:
-            log.warning("[BEDROCK] post_incident_report: non-JSON response")
+        if raw.startswith("__BEDROCK_UNAVAILABLE__"):
+            log.warning("[BEDROCK] post_incident_report: model unavailable — using template")
             report = {
-                "executive_summary"      : raw[:500],
-                "timeline"               : [],
-                "root_cause"             : incident_data.get("root_cause_hypothesis", ""),
-                "contributing_factors"   : [],
-                "impact_summary"         : f"Duration: {duration_min} min",
-                "what_went_well"         : ["Automated detection worked"],
-                "what_went_wrong"        : ["Manual review required"],
-                "corrective_actions"     : [],
-                "lessons_learned"        : ["Improve observability"],
+                "executive_summary"      : f"Incident {incident_data.get('incident_id','INC-UNKNOWN')}: {incident_data.get('event_type','unknown')} lasting {duration_min} minutes affecting {incident_data.get('affected_ues',0)} UEs. Automated detection and remediation engaged. Bedrock AI narrative unavailable — enable model access for full PIR.",
+                "timeline"               : [
+                    {"time": "T+0m",             "event": f"Anomaly detected ({incident_data.get('event_type','unknown')})"},
+                    {"time": f"T+{duration_min}m", "event": "Incident resolved"},
+                ],
+                "root_cause"             : incident_data.get("root_cause_hypothesis", "Under investigation"),
+                "contributing_factors"   : ["Automated detection triggered", "Closed-loop engine responded"],
+                "impact_summary"         : f"Duration: {duration_min} min, Affected UEs: {incident_data.get('affected_ues', 0)}",
+                "what_went_well"         : ["IsolationForest anomaly detection worked", "Automated UPF scaling responded"],
+                "what_went_wrong"        : ["Bedrock AI narrative unavailable (enable model access)"],
+                "corrective_actions"     : [
+                    {"action": "Enable Bedrock model access in AWS Console", "owner": "ops-team", "due": "ASAP"},
+                ],
+                "lessons_learned"        : ["Enable Bedrock for full AI-powered PIRs"],
                 "recurrence_probability" : "medium",
-                "estimated_cost_impact"  : "unknown",
+                "estimated_cost_impact"  : "Compute cost for UPF scaling only",
             }
+        else:
+            try:
+                clean = raw.strip().strip("```json").strip("```").strip()
+                report = json.loads(clean)
+            except json.JSONDecodeError:
+                log.warning("[BEDROCK] post_incident_report: non-JSON response")
+                report = {
+                    "executive_summary"      : raw[:500],
+                    "timeline"               : [],
+                    "root_cause"             : incident_data.get("root_cause_hypothesis", ""),
+                    "contributing_factors"   : [],
+                    "impact_summary"         : f"Duration: {duration_min} min",
+                    "what_went_well"         : ["Automated detection worked"],
+                    "what_went_wrong"        : ["Manual review required"],
+                    "corrective_actions"     : [],
+                    "lessons_learned"        : ["Improve observability"],
+                    "recurrence_probability" : "medium",
+                    "estimated_cost_impact"  : "unknown",
+                }
 
         report["incident_id"]  = incident_data.get("incident_id", "INC-UNKNOWN")
         report["generated_at"] = datetime.now(timezone.utc).isoformat()
