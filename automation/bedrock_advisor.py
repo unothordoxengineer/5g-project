@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-bedrock_advisor.py — Phase 8.7 Claude Bedrock AI Network Operations Advisor
+bedrock_advisor.py — Phase 8.7 Bedrock AI Network Operations Advisor
 =============================================================================
 Provides AI-powered analysis, forecasting, and recommendations for the 5G
-core network using Amazon Bedrock (Claude models via IRSA — no static creds).
+core network using Amazon Bedrock (4-tier model cascade via IRSA — no static creds).
+
+4-tier model cascade (automatic failover):
+  Tier 1 — Claude Sonnet 4.6   (primary, cross-region inference profile)
+  Tier 2 — Claude Haiku 4.5    (Claude fallback)
+  Tier 3 — Amazon Nova Lite    (free fallback when Claude needs account form)
+  Tier 4 — Amazon Nova Micro   (last-resort free fallback)
 
 Features:
   • analyse_network_event()        — incident triage + root-cause analysis
@@ -17,11 +23,13 @@ Features:
 All reports are saved to S3 and critical events are SNS-notified.
 
 Configuration (environment variables):
-  BEDROCK_REGION         default: us-east-1
-  BEDROCK_PRIMARY_MODEL  default: anthropic.claude-sonnet-4-6
-  BEDROCK_FALLBACK_MODEL default: anthropic.claude-haiku-4-5-20251001-v1:0
-  S3_BUCKET              default: 5g-core-ml-models-749534910877
-  SNS_TOPIC_ARN          default: arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts
+  BEDROCK_REGION            default: us-east-1
+  BEDROCK_PRIMARY_MODEL     default: us.anthropic.claude-sonnet-4-6
+  BEDROCK_FALLBACK_MODEL    default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+  BEDROCK_NOVA_LITE_MODEL   default: amazon.nova-lite-v1:0
+  BEDROCK_NOVA_MICRO_MODEL  default: amazon.nova-micro-v1:0
+  S3_BUCKET                 default: 5g-core-ml-models-749534910877
+  SNS_TOPIC_ARN             default: arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts
 """
 
 import os
@@ -38,15 +46,25 @@ import boto3
 from botocore.exceptions import ClientError
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-BEDROCK_REGION         = os.environ.get("BEDROCK_REGION", "us-east-1")
-BEDROCK_PRIMARY_MODEL  = os.environ.get("BEDROCK_PRIMARY_MODEL",
-                                         "us.anthropic.claude-sonnet-4-6")
-BEDROCK_FALLBACK_MODEL = os.environ.get("BEDROCK_FALLBACK_MODEL",
-                                         "us.anthropic.claude-haiku-4-5-20251001-v1:0")
-S3_BUCKET              = os.environ.get("S3_BUCKET",
-                                         "5g-core-ml-models-749534910877")
-SNS_TOPIC_ARN          = os.environ.get("SNS_TOPIC_ARN",
-                                         "arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts")
+BEDROCK_REGION          = os.environ.get("BEDROCK_REGION", "us-east-1")
+# Tier 1 & 2 — Claude (cross-region inference profiles)
+BEDROCK_PRIMARY_MODEL   = os.environ.get("BEDROCK_PRIMARY_MODEL",
+                                          "us.anthropic.claude-sonnet-4-6")
+BEDROCK_FALLBACK_MODEL  = os.environ.get("BEDROCK_FALLBACK_MODEL",
+                                          "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+# Tier 3 & 4 — Amazon Nova (free, no use-case form required)
+BEDROCK_NOVA_LITE_MODEL  = os.environ.get("BEDROCK_NOVA_LITE_MODEL",
+                                           "amazon.nova-lite-v1:0")
+BEDROCK_NOVA_MICRO_MODEL = os.environ.get("BEDROCK_NOVA_MICRO_MODEL",
+                                           "amazon.nova-micro-v1:0")
+S3_BUCKET               = os.environ.get("S3_BUCKET",
+                                          "5g-core-ml-models-749534910877")
+SNS_TOPIC_ARN           = os.environ.get("SNS_TOPIC_ARN",
+                                          "arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts")
+
+# Classify models by their API format (Nova uses Amazon Messages API, not Anthropic format)
+_NOVA_MODELS = frozenset({"amazon.nova-lite-v1:0", "amazon.nova-micro-v1:0",
+                           "amazon.nova-pro-v1:0"})
 
 # 14 Network Functions tracked for predictive maintenance
 NETWORK_FUNCTIONS = [
@@ -123,19 +141,23 @@ class BedrockNetworkAdvisor:
     # ── Core Bedrock invocation ────────────────────────────────────────────────
     def _invoke(self, prompt: str, system: str = "", max_tokens: int = 1500) -> str:
         """
-        Invoke Bedrock with primary model, fall back to haiku on failure.
-        Returns the assistant's text response.
+        4-tier model cascade:
+          Claude Sonnet 4.6 → Claude Haiku 4.5 → Nova Lite → Nova Micro
+
+        Returns the assistant's text response, or the sentinel string
+        '__BEDROCK_UNAVAILABLE__: <error>' if all four models fail.
         """
-        messages = [{"role": "user", "content": prompt}]
-        body = {
+        last_error = ""
+
+        # ── Tier 1 & 2: Claude models (Anthropic Messages API format) ──────────
+        claude_body = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": max_tokens,
-            "messages": messages,
+            "messages": [{"role": "user", "content": prompt}],
         }
         if system:
-            body["system"] = system
+            claude_body["system"] = system
 
-        last_error = ""
         for model_id in [BEDROCK_PRIMARY_MODEL, BEDROCK_FALLBACK_MODEL]:
             try:
                 self._stats["invocations"] += 1
@@ -143,7 +165,7 @@ class BedrockNetworkAdvisor:
                     modelId=model_id,
                     contentType="application/json",
                     accept="application/json",
-                    body=json.dumps(body),
+                    body=json.dumps(claude_body),
                 )
                 result = json.loads(resp["body"].read())
                 text = result["content"][0]["text"]
@@ -160,7 +182,48 @@ class BedrockNetworkAdvisor:
                 last_error = str(e)
                 log.warning(f"[BEDROCK] {model_id} error: {e}")
 
-        # Both models failed — return sentinel so callers can degrade gracefully
+        # ── Tier 3 & 4: Amazon Nova fallback (Amazon Messages API format) ──────
+        # Nova prompt: inject system context into the user turn if provided
+        nova_prompt = f"{system}\n\n{prompt}" if system else prompt
+        nova_body = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"text": nova_prompt}],
+                }
+            ],
+            "inferenceConfig": {
+                "maxTokens": max_tokens,
+                "temperature": 0.7,
+                "topP": 0.9,
+            },
+        }
+
+        for model_id in [BEDROCK_NOVA_LITE_MODEL, BEDROCK_NOVA_MICRO_MODEL]:
+            try:
+                self._stats["invocations"] += 1
+                resp = self._get_bedrock().invoke_model(
+                    modelId=model_id,
+                    contentType="application/json",
+                    accept="application/json",
+                    body=json.dumps(nova_body),
+                )
+                result = json.loads(resp["body"].read())
+                text = result["output"]["message"]["content"][0]["text"]
+                log.info(f"[BEDROCK] {model_id} (Nova fallback) — {len(text)} chars returned")
+                return text
+            except ClientError as e:
+                code = e.response["Error"]["Code"]
+                msg  = e.response["Error"]["Message"]
+                self._stats["failures"] += 1
+                last_error = f"{code}: {msg}"
+                log.warning(f"[BEDROCK] {model_id} ClientError {code}: {msg}")
+            except Exception as e:
+                self._stats["failures"] += 1
+                last_error = str(e)
+                log.warning(f"[BEDROCK] {model_id} error: {e}")
+
+        # All four models failed — return sentinel so callers can degrade gracefully
         return f"__BEDROCK_UNAVAILABLE__: {last_error}"
 
     # ── S3 helpers ─────────────────────────────────────────────────────────────

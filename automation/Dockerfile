@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-LABEL description="5G Core Closed-Loop Automation Engine — Phase 8.7 (SageMaker + Bedrock)"
-LABEL version="3.0.0"
+LABEL description="5G Core Closed-Loop Automation Engine — Phase 8.7 (SageMaker + Bedrock 4-tier)"
+LABEL version="3.1.0"
 
 WORKDIR /app
 
@@ -27,6 +27,8 @@ ENV BEDROCK_REGION=us-east-1
 ENV BEDROCK_ENABLED=true
 ENV BEDROCK_PRIMARY_MODEL=us.anthropic.claude-sonnet-4-6
 ENV BEDROCK_FALLBACK_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+ENV BEDROCK_NOVA_LITE_MODEL=amazon.nova-lite-v1:0
+ENV BEDROCK_NOVA_MICRO_MODEL=amazon.nova-micro-v1:0
 ENV S3_BUCKET=5g-core-ml-models-749534910877
 ENV SNS_TOPIC_ARN=arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts
 

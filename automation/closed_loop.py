@@ -555,9 +555,13 @@ def main():
     log.info(f"  Log file            : {LOG_FILE}")
     log.info(f"  Bedrock enabled     : {_BEDROCK_OK}")
     if _BEDROCK_OK:
-        from bedrock_advisor import BEDROCK_PRIMARY_MODEL, BEDROCK_FALLBACK_MODEL, S3_BUCKET, SNS_TOPIC_ARN
-        log.info(f"  Bedrock primary     : {BEDROCK_PRIMARY_MODEL}")
-        log.info(f"  Bedrock fallback    : {BEDROCK_FALLBACK_MODEL}")
+        from bedrock_advisor import (BEDROCK_PRIMARY_MODEL, BEDROCK_FALLBACK_MODEL,
+                                     BEDROCK_NOVA_LITE_MODEL, BEDROCK_NOVA_MICRO_MODEL,
+                                     S3_BUCKET, SNS_TOPIC_ARN)
+        log.info(f"  Bedrock tier-1      : {BEDROCK_PRIMARY_MODEL}")
+        log.info(f"  Bedrock tier-2      : {BEDROCK_FALLBACK_MODEL}")
+        log.info(f"  Bedrock tier-3      : {BEDROCK_NOVA_LITE_MODEL}  (Nova Lite fallback)")
+        log.info(f"  Bedrock tier-4      : {BEDROCK_NOVA_MICRO_MODEL} (Nova Micro fallback)")
         log.info(f"  S3 bucket           : {S3_BUCKET}")
         log.info(f"  SNS topic           : {SNS_TOPIC_ARN}")
 
