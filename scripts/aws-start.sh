@@ -24,6 +24,44 @@ terraform apply -target='aws_nat_gateway.main[0]' -target='aws_nat_gateway.main[
 echo "      NAT gateways ready."
 cd - >/dev/null
 
+# ── 1b. Fix private subnet route tables ─────────────────────────────────────
+# Terraform recreates NAT GWs with new IDs but the route tables (managed by
+# the EKS Terraform module) are NOT updated by the targeted apply above.
+# We fix them with AWS CLI using the known private RTB IDs and AZ subnets.
+echo ""
+echo "[1b] Fixing private subnet route tables → new NAT GWs..."
+# us-east-1a: NAT GW must be in public subnet subnet-06e81ed8f65e1b44b
+NAT_1A=$(aws ec2 describe-nat-gateways \
+  --filter "Name=subnet-id,Values=subnet-06e81ed8f65e1b44b" "Name=state,Values=available" \
+  --query 'NatGateways[0].NatGatewayId' --output text --region $REGION 2>/dev/null)
+# us-east-1b: NAT GW must be in public subnet subnet-0e5ccd8928c0e674a
+NAT_1B=$(aws ec2 describe-nat-gateways \
+  --filter "Name=subnet-id,Values=subnet-0e5ccd8928c0e674a" "Name=state,Values=available" \
+  --query 'NatGateways[0].NatGatewayId' --output text --region $REGION 2>/dev/null)
+
+if [ -n "$NAT_1A" ] && [ "$NAT_1A" != "None" ]; then
+  aws ec2 replace-route \
+    --route-table-id rtb-0adb38539192fd36f \
+    --destination-cidr-block 0.0.0.0/0 \
+    --nat-gateway-id "$NAT_1A" --region $REGION
+  echo "      rtb-0adb38539192fd36f (us-east-1a) → $NAT_1A"
+  # Sync into Terraform state so next apply is clean
+  (cd "$TF_DIR" && terraform import 'aws_nat_gateway.main[0]' "$NAT_1A" 2>/dev/null) || true
+else
+  echo "      WARNING: No available NAT GW found for us-east-1a"
+fi
+
+if [ -n "$NAT_1B" ] && [ "$NAT_1B" != "None" ]; then
+  aws ec2 replace-route \
+    --route-table-id rtb-0a8fb46bbffbaee89 \
+    --destination-cidr-block 0.0.0.0/0 \
+    --nat-gateway-id "$NAT_1B" --region $REGION
+  echo "      rtb-0a8fb46bbffbaee89 (us-east-1b) → $NAT_1B"
+  (cd "$TF_DIR" && terraform import 'aws_nat_gateway.main[1]' "$NAT_1B" 2>/dev/null) || true
+else
+  echo "      WARNING: No available NAT GW found for us-east-1b"
+fi
+
 # ── 2. Scale EKS nodes back to 3 ────────────────────────────────────────────
 echo ""
 echo "[2/6] Scaling EKS nodes to 3..."
