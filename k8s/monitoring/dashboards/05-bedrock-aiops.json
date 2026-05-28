@@ -1,0 +1,713 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": {"list": []},
+  "description": "Phase 8.7 — Claude Bedrock AI-Ops: invocations, decisions, health score, incident reports",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "title": "🤖 Bedrock AI Layer",
+      "type": "row"
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Total Claude Bedrock model invocations from the closed-loop engine",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue",  "value": null},
+              {"color": "green", "value": 1},
+              {"color": "yellow","value": 50},
+              {"color": "orange","value": 200}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Bedrock Invocations (total)",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Invocations",
+          "dimensions": {
+            "ModelId": "anthropic.claude-sonnet-4-6"
+          },
+          "expression": "",
+          "highResolution": false,
+          "id": "",
+          "matchExact": true,
+          "metricName": "Invocations",
+          "namespace": "AWS/Bedrock",
+          "period": "3600",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Average Bedrock response latency (ms)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 2000},
+              {"color": "orange", "value": 5000},
+              {"color": "red",    "value": 10000}
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Bedrock Latency (avg)",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Latency ms",
+          "dimensions": {
+            "ModelId": "anthropic.claude-sonnet-4-6"
+          },
+          "metricName": "InvocationLatency",
+          "namespace": "AWS/Bedrock",
+          "period": "300",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Average"]
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Token usage: input + output tokens per invocation",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "title": "Tokens Used (total)",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Input tokens",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "InputTokenCount",
+          "namespace": "AWS/Bedrock",
+          "period": "3600",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        },
+        {
+          "alias": "Output tokens",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "OutputTokenCount",
+          "namespace": "AWS/Bedrock",
+          "period": "3600",
+          "refId": "B",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Bedrock throttle / error events (should be 0)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green",  "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red",    "value": 5}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "title": "Bedrock Throttle Errors",
+      "type": "stat",
+      "targets": [
+        {
+          "alias": "Throttles",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "ThrottledRequests",
+          "namespace": "AWS/Bedrock",
+          "period": "3600",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "id": 101,
+      "title": "📊 AI Decision Timeline",
+      "type": "row"
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Bedrock invocations over time — shows AI activity cadence",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Invocations/min",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "normal"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 6},
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "title": "AI Decision Timeline — Bedrock Invocations by Type",
+      "type": "timeseries",
+      "targets": [
+        {
+          "alias": "Anomaly Analysis",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "Invocations",
+          "namespace": "AWS/Bedrock",
+          "period": "60",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "cloudwatch", "uid": "${CW_DS}"},
+      "description": "Bedrock token consumption over time — cost proxy",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 6},
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {"mode": "single"}
+      },
+      "title": "Token Usage Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "alias": "Input tokens",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "InputTokenCount",
+          "namespace": "AWS/Bedrock",
+          "period": "300",
+          "refId": "A",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        },
+        {
+          "alias": "Output tokens",
+          "dimensions": {"ModelId": "anthropic.claude-sonnet-4-6"},
+          "metricName": "OutputTokenCount",
+          "namespace": "AWS/Bedrock",
+          "period": "300",
+          "refId": "B",
+          "region": "us-east-1",
+          "statistics": ["Sum"]
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+      "id": 102,
+      "title": "🏥 Network Health Score",
+      "type": "row"
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "Composite 0-100 network health score (derived from UPF CPU, anomaly score, capacity headroom)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [
+            {"options": {"from": 90, "result": {"color": "green",  "index": 0, "text": "Excellent"}, "to": 100}, "type": "range"},
+            {"options": {"from": 75, "result": {"color": "blue",   "index": 1, "text": "Good"      }, "to": 89 }, "type": "range"},
+            {"options": {"from": 60, "result": {"color": "yellow", "index": 2, "text": "Fair"      }, "to": 74 }, "type": "range"},
+            {"options": {"from": 40, "result": {"color": "orange", "index": 3, "text": "Poor"      }, "to": 59 }, "type": "range"},
+            {"options": {"from": 0,  "result": {"color": "red",    "index": 4, "text": "Critical"  }, "to": 39 }, "type": "range"}
+          ],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red",    "value": null},
+              {"color": "orange", "value": 40},
+              {"color": "yellow", "value": 60},
+              {"color": "blue",   "value": 75},
+              {"color": "green",  "value": 90}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 15},
+      "id": 7,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "title": "Overall Health Score",
+      "type": "gauge",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 1.2)",
+          "instant": true,
+          "legendFormat": "Health Score",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "Per-slice health scores: eMBB, URLLC, mMTC",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red",    "value": null},
+              {"color": "orange", "value": 40},
+              {"color": "yellow", "value": 60},
+              {"color": "green",  "value": 80}
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "unit": "short"
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "eMBB"},  "properties": [{"id": "color", "value": {"fixedColor": "blue",   "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "URLLC"}, "properties": [{"id": "color", "value": {"fixedColor": "green",  "mode": "fixed"}}]},
+          {"matcher": {"id": "byName", "options": "mMTC"},  "properties": [{"id": "color", "value": {"fixedColor": "purple", "mode": "fixed"}}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 15},
+      "id": 8,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "text": {}
+      },
+      "title": "Health Score by Network Slice",
+      "type": "bargauge",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp_min(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 0.72 + 0.0 * 0.28), 0)",
+          "instant": true,
+          "legendFormat": "eMBB",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp_min(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 0.84 + 0.0 * 0.16), 0)",
+          "instant": true,
+          "legendFormat": "URLLC",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp_min(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"amf.*\",container=\"amf\"}[1m])) * 100 * 0.5 + 0.0 * 0.5), 0)",
+          "instant": true,
+          "legendFormat": "mMTC",
+          "refId": "C"
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "Health score time-series — shows network stability trends",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red",    "value": null},
+              {"color": "orange", "value": 40},
+              {"color": "yellow", "value": 60},
+              {"color": "green",  "value": 80}
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["min", "mean", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {"mode": "multi"}
+      },
+      "title": "Network Health Score — Time Series",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 1.2), 0, 100)",
+          "legendFormat": "Overall",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 0.72), 0, 100)",
+          "legendFormat": "eMBB",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "clamp(100 - (sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100 * 0.84), 0, 100)",
+          "legendFormat": "URLLC",
+          "refId": "C"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 103,
+      "title": "🚨 Anomaly Events + AI Analysis",
+      "type": "row"
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "UPF CPU% with anomaly threshold overlay — shows when Bedrock AI was triggered",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "thresholdsStyle": {"mode": "line+area"}
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "transparent", "value": null},
+              {"color": "rgba(255,100,0,0.15)", "value": 60}
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Anomaly Trigger (60%)"},
+            "properties": [
+              {"id": "color", "value": {"fixedColor": "orange", "mode": "fixed"}},
+              {"id": "custom.lineStyle", "value": {"dash": [8, 4], "fill": "dash"}},
+              {"id": "custom.fillOpacity", "value": 0}
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 24},
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {"mode": "multi"}
+      },
+      "title": "UPF CPU% with Bedrock Anomaly Trigger Threshold",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"open5gs\",pod=~\"upf.*\",container=\"upf\"}[1m])) * 100",
+          "legendFormat": "UPF CPU%",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "60",
+          "legendFormat": "Anomaly Trigger (60%)",
+          "refId": "B"
+        }
+      ]
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "UPF replica count changes — shows auto-scaling triggered by AI decisions",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"fixedColor": "green", "mode": "fixed"},
+          "custom": {
+            "drawStyle": "stepAfter",
+            "fillOpacity": 40,
+            "lineWidth": 2,
+            "pointSize": 8,
+            "showPoints": "always"
+          },
+          "min": 0,
+          "max": 6,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24},
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["min", "max", "lastNotNull"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "title": "UPF Replicas (AI-Driven Scaling)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+          "expr": "kube_deployment_spec_replicas{namespace=\"open5gs\",deployment=\"upf\"}",
+          "legendFormat": "UPF replicas",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+      "id": 104,
+      "title": "📋 Latest AI Incident Report",
+      "type": "row"
+    },
+
+    {
+      "datasource": {"type": "prometheus", "uid": "${PROM_DS}"},
+      "description": "Latest network state from SageMaker classifier + Bedrock narrative. Check S3 for full reports.",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 33},
+      "id": 12,
+      "options": {
+        "code": {
+          "language": "markdown",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## 🤖 Claude Bedrock AI-Ops — Phase 8.7\n\nAll AI-generated reports are saved to **S3**: `s3://5g-core-ml-models-749534910877/`\n\n| Report Type | S3 Prefix | Trigger |\n|---|---|---|\n| Incident Analysis | `incidents/` | anomaly_score > 0.6 |\n| Capacity Forecast | `capacity-forecasts/` | forecast > 150 UEs |\n| Predictive Alerts | `predictive-alerts/` | hourly |\n| Post-Incident PIR | `post-incident-reports/` | anomaly resolves |\n| Daily Summary | `daily-summaries/` | every 6 hours |\n\n**Check your email** (`nigelkadzinga91@gmail.com`) for SNS alerts on critical events.\n\n```bash\n# List latest reports\naws s3 ls s3://5g-core-ml-models-749534910877/incidents/ --recursive --human-readable | tail -5\naws s3 ls s3://5g-core-ml-models-749534910877/post-incident-reports/ --recursive --human-readable | tail -5\n\n# Read latest incident report\naws s3 cp $(aws s3 ls s3://5g-core-ml-models-749534910877/incidents/ --recursive | sort | tail -1 | awk '{print \"s3://5g-core-ml-models-749534910877/\"$4}') -\n```",
+        "mode": "markdown"
+      },
+      "title": "AI Reports Reference",
+      "type": "text"
+    }
+
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["5g-core", "bedrock", "ai-ops", "phase-8.7"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "PROM_DS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource",
+        "label": "Prometheus"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "CW_DS",
+        "options": [],
+        "query": "cloudwatch",
+        "refresh": 1,
+        "type": "datasource",
+        "label": "CloudWatch"
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "05 — Bedrock AI-Ops",
+  "uid": "bedrock-aiops-01",
+  "version": 1
+}
