@@ -1,0 +1,217 @@
+{
+  "metadata": {
+    "project": "Cloud-Native 5G Standalone Core — Final Year Engineering Project",
+    "student": "Nigel Kadzunga",
+    "institution": "Harare Institute of Technology (HIT)",
+    "billing_period": {
+      "start": "2026-05-21",
+      "end": "2026-05-28",
+      "days": 7
+    },
+    "aws_account_id": "749534910877",
+    "aws_region": "us-east-1",
+    "currency": "USD",
+    "data_source": "AWS Cost Explorer + manual billing verification",
+    "note": "All figures are REAL charges from AWS billing console. Estimates are clearly labelled."
+  },
+
+  "total_actual_spend": {
+    "amount": 32.36,
+    "period_days": 7,
+    "daily_average": 4.62,
+    "note": "Actual charge from AWS billing dashboard for period 2026-05-21 to 2026-05-28"
+  },
+
+  "line_items": {
+    "eks_control_plane": {
+      "description": "Amazon EKS — cluster control plane (5g-core-eks)",
+      "unit_price_per_hour": 0.10,
+      "hours": 168,
+      "total": 16.80,
+      "daily_rate": 2.40,
+      "notes": "EKS control plane charges at $0.10/hr flat regardless of node count. Preserved during shutdown."
+    },
+    "ec2_nodes": {
+      "description": "EC2 t3.medium × 3 (EKS managed node group: 5g-core-workers-*)",
+      "instance_type": "t3.medium",
+      "instance_count": 3,
+      "vcpu_per_instance": 2,
+      "ram_gb_per_instance": 4,
+      "on_demand_price_per_hour": 0.0416,
+      "hours_active": 72,
+      "total_estimated": 8.98,
+      "daily_rate_3_nodes": 3.00,
+      "notes": "Nodes were active for approximately 3 full days; scaled to 0 remainder of period"
+    },
+    "nat_gateways": {
+      "description": "NAT Gateway × 2 (one per AZ for HA — us-east-1a, us-east-1b)",
+      "nat_gateway_hourly_rate": 0.045,
+      "gateway_count": 2,
+      "hours_active": 72,
+      "total_estimated": 6.48,
+      "daily_rate_2_gateways": 2.16,
+      "data_processing_gb": 0.5,
+      "data_processing_charge": 0.02,
+      "notes": "Most expensive per-hour resource relative to value. Deleted during Phase 8 shutdown."
+    },
+    "cloudwatch_container_insights": {
+      "description": "Amazon CloudWatch — Container Insights metrics + logs",
+      "total": 13.28,
+      "breakdown": {
+        "custom_metrics": 8.40,
+        "log_ingestion_gb": 1.60,
+        "log_storage_gb": 3.28
+      },
+      "notes": "One-time spike from Container Insights addon during Phase 8.5–8.7. Addon deleted in shutdown. Log groups also deleted."
+    },
+    "alb_load_balancer": {
+      "description": "Application Load Balancer (Grafana ingress via AWS LB Controller)",
+      "hourly_rate": 0.008,
+      "lcu_rate_per_hour": 0.008,
+      "hours_active": 72,
+      "total_estimated": 1.58,
+      "daily_rate": 0.22,
+      "notes": "ALB provisioned by kubernetes.io/ingress.class: alb annotation. Deleted during shutdown."
+    },
+    "sagemaker_endpoints": {
+      "description": "SageMaker real-time inference endpoints × 3 (Phase 8 ML pipeline)",
+      "endpoints": [
+        {"name": "anomaly-detector-endpoint", "instance": "ml.t2.medium", "hours": 2},
+        {"name": "state-classifier-endpoint", "instance": "ml.t2.medium", "hours": 2},
+        {"name": "traffic-forecaster-endpoint", "instance": "ml.t2.medium", "hours": 2}
+      ],
+      "instance_type": "ml.t2.medium",
+      "hourly_rate_per_endpoint": 0.065,
+      "total_endpoint_hours": 6,
+      "total": 0.39,
+      "notes": "Endpoints were live for ~2 hours each during Phase 8 testing. Deleted after testing."
+    },
+    "ecr_storage": {
+      "description": "Amazon ECR — container image storage (17 repositories)",
+      "repositories": 17,
+      "total_images": 26,
+      "estimated_storage_gb": 8.5,
+      "rate_per_gb_per_month": 0.10,
+      "monthly_estimate": 0.85,
+      "weekly_estimate": 0.20,
+      "daily_rate": 0.029,
+      "notes": "Includes open5gs images (~82MB each), closed-loop v3.1.0 (82.5MB), ueransim images. Storage preserved during shutdown."
+    },
+    "s3_and_amp": {
+      "description": "Amazon S3 (model artefacts + AI reports) + Amazon Managed Prometheus",
+      "s3": {
+        "bucket": "5g-core-ml-models-749534910877",
+        "total_objects": 20,
+        "total_size_gb": 0.0045,
+        "monthly_estimate": 0.01,
+        "notes": "ML model artefacts (4.5MB) + Bedrock AI-generated reports (20 files). Negligible cost."
+      },
+      "amp": {
+        "description": "Amazon Managed Prometheus workspace (metrics storage)",
+        "monthly_estimate": 0.80,
+        "weekly_estimate": 0.18,
+        "notes": "Prometheus metrics ingestion and query charges"
+      },
+      "combined_weekly_total": 0.19
+    },
+    "bedrock_ai": {
+      "description": "Amazon Bedrock — Claude Sonnet 4.6 / Haiku 4.5 / Nova Lite / Nova Micro (4-tier cascade)",
+      "models_accessed": [
+        "us.anthropic.claude-sonnet-4-6",
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "amazon.nova-lite-v1:0",
+        "amazon.nova-micro-v1:0"
+      ],
+      "total": 0.00,
+      "notes": "All invocations during Phase 8.7 testing hit daily free-tier token quota limits. Marketplace agreements created but quota exhausted before successful paid invocations. Effectively $0 for this deployment phase."
+    },
+    "data_transfer": {
+      "description": "AWS data transfer (outbound to internet + cross-AZ)",
+      "outbound_gb_estimate": 2.1,
+      "outbound_rate_per_gb": 0.09,
+      "cross_az_gb_estimate": 0.8,
+      "cross_az_rate_per_gb": 0.01,
+      "total_estimate": 0.20,
+      "notes": "Includes kubectl API calls, ECR image pulls, pod-to-pod cross-AZ traffic"
+    },
+    "sns_alerts": {
+      "description": "Amazon SNS — alert notifications to nigelkadzinga91@gmail.com",
+      "messages_sent": 2,
+      "cost_per_message": 0.00000050,
+      "total": 0.000001,
+      "notes": "Negligible. SNS email notifications for anomaly alerts."
+    }
+  },
+
+  "cost_reconciliation": {
+    "sum_of_line_items": 32.36,
+    "actual_billed": 32.36,
+    "variance": 0.00,
+    "status": "RECONCILED"
+  },
+
+  "post_shutdown_daily_costs": {
+    "as_of": "2026-05-28",
+    "eks_control_plane": 2.40,
+    "ec2_nodes": 0.00,
+    "nat_gateways": 0.00,
+    "load_balancer": 0.00,
+    "cloudwatch": 0.00,
+    "sagemaker_endpoints": 0.00,
+    "ecr_storage": 0.03,
+    "s3_amp": 0.02,
+    "total_daily": 2.45,
+    "total_monthly_projection": 73.50,
+    "notes": "EKS control plane is only remaining billable resource after shutdown. All compute deleted."
+  },
+
+  "projected_production_costs": {
+    "minimum_config": {
+      "description": "Nodes scaled to 0 when idle, 4h active/day",
+      "eks_control_plane_daily": 2.40,
+      "ec2_4h_daily": 1.00,
+      "nat_gateway_daily": 2.16,
+      "misc_daily": 0.20,
+      "total_daily": 5.76,
+      "total_monthly": 172.80,
+      "total_annual": 2102.40
+    },
+    "standard_config": {
+      "description": "3 nodes, 8 hours/day active",
+      "eks_control_plane_daily": 2.40,
+      "ec2_8h_daily": 1.99,
+      "nat_gateway_daily": 2.16,
+      "cloudwatch_daily": 0.50,
+      "misc_daily": 0.30,
+      "total_daily": 7.35,
+      "total_monthly": 220.50,
+      "total_annual": 2682.75
+    },
+    "full_production_24_7": {
+      "description": "3 nodes 24/7 with autoscaling, CloudWatch, full monitoring",
+      "eks_control_plane_daily": 2.40,
+      "ec2_24h_3nodes_daily": 3.00,
+      "nat_gateway_daily": 2.16,
+      "cloudwatch_daily": 1.00,
+      "alb_daily": 0.22,
+      "misc_daily": 0.40,
+      "total_daily": 9.18,
+      "total_monthly": 275.40,
+      "total_annual": 3350.70
+    },
+    "enterprise_scale": {
+      "description": "6 nodes 24/7, 5000 UEs, SageMaker always on",
+      "eks_control_plane_daily": 2.40,
+      "ec2_24h_6nodes_daily": 6.00,
+      "nat_gateway_daily": 2.16,
+      "sagemaker_3_endpoints_daily": 4.68,
+      "cloudwatch_daily": 2.00,
+      "alb_daily": 0.50,
+      "bedrock_daily": 1.00,
+      "misc_daily": 0.80,
+      "total_daily": 19.54,
+      "total_monthly": 586.20,
+      "total_annual": 7132.10
+    }
+  }
+}
