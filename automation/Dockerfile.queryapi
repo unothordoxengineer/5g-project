@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Dockerfile.queryapi — Network Query API (Flask)
+# Build context: 5g-project/automation/
+# ---------------------------------------------------------------------------
+FROM python:3.11-slim
+
+LABEL maintainer="Nigel Farai Kadzinga <H240582T@hit.ac.zw>" \
+      description="5G Network Query API — natural-language Q&A backed by Bedrock + Prometheus" \
+      version="1.0.0"
+
+# ── non-root user ────────────────────────────────────────────────────────────
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# ── Python dependencies ──────────────────────────────────────────────────────
+# Copy requirements first so Docker layer-caches the install step
+COPY requirements-queryapi.txt ./
+RUN pip install --no-cache-dir -r requirements-queryapi.txt
+
+# ── application source ───────────────────────────────────────────────────────
+# Copy only what the Query API needs
+COPY network_query_api.py ./
+COPY bedrock_advisor.py   ./
+# closed_loop is imported indirectly by bedrock_advisor for shared helpers
+COPY closed_loop.py       ./
+
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+# ── runtime ──────────────────────────────────────────────────────────────────
+EXPOSE 8080
+
+# Graceful shutdown via SIGTERM supported by Flask dev server;
+# for production add gunicorn here.
+ENV FLASK_ENV=production \
+    PYTHONUNBUFFERED=1 \
+    PORT=8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python3 -c \
+        "import urllib.request,json,sys; \
+         r=urllib.request.urlopen('http://localhost:8080/health',timeout=4); \
+         d=json.loads(r.read()); \
+         sys.exit(0 if d.get('status')=='healthy' else 1)"
+
+CMD ["python3", "network_query_api.py"]

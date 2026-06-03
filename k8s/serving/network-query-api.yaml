@@ -1,0 +1,171 @@
+# ---------------------------------------------------------------------------
+# network-query-api.yaml
+# 5G Network Query API — Kubernetes manifests
+# Namespace: open5gs
+# ---------------------------------------------------------------------------
+
+# ── ServiceAccount (IRSA) ────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: network-query-api
+  namespace: open5gs
+  labels:
+    app: network-query-api
+  annotations:
+    # Replace with the actual IRSA role ARN after IAM role is created
+    eks.amazonaws.com/role-arn: "arn:aws:iam::637423540591:role/5g-network-query-api-irsa"
+
+---
+# ── Deployment ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-query-api
+  namespace: open5gs
+  labels:
+    app: network-query-api
+    version: "1.0.0"
+    component: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-query-api
+  template:
+    metadata:
+      labels:
+        app: network-query-api
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: network-query-api
+
+      # Tolerate control-plane taint for kind/single-node clusters
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      containers:
+        - name: network-query-api
+          # Local kind image (override with ECR URI for EKS)
+          image: network-query-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8080"
+            - name: NAMESPACE
+              value: "open5gs"
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-kube-prometheus-prometheus.monitoring:9090"
+            - name: BEDROCK_ENABLED
+              value: "true"
+            # AWS region picked up automatically by boto3 from IRSA token;
+            # explicit for clarity:
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # Flask needs /tmp for debug mode
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+# ── Service (NodePort for local access) ──────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-query-api
+  namespace: open5gs
+  labels:
+    app: network-query-api
+spec:
+  type: NodePort
+  selector:
+    app: network-query-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30808
+      protocol: TCP
+
+---
+# ── NetworkPolicy ─────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: network-query-api
+  namespace: open5gs
+  labels:
+    app: network-query-api
+spec:
+  podSelector:
+    matchLabels:
+      app: network-query-api
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # Allow inbound from anywhere (browser / curl)
+  ingress:
+    - {}
+
+  egress:
+    # DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    # Prometheus in monitoring namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+
+    # AWS Bedrock / STS / SageMaker — HTTPS outbound
+    - ports:
+        - port: 443
+          protocol: TCP
+
+    # Allow egress to kube-apiserver (needed by some IRSA helpers)
+    - ports:
+        - port: 6443
+          protocol: TCP
