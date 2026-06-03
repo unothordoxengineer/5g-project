@@ -1,0 +1,86 @@
+{
+  "mann_whitney": {
+    "eMBB vs mMTC": {
+      "U_stat": 16.0,
+      "p_value": 0.0294,
+      "cohens_d": 11.881,
+      "significant": true,
+      "effect_magnitude": "large"
+    },
+    "eMBB vs URLLC": {
+      "U_stat": 16.0,
+      "p_value": 0.0294,
+      "cohens_d": 10.785,
+      "significant": true,
+      "effect_magnitude": "large"
+    },
+    "mMTC vs URLLC": {
+      "U_stat": 16.0,
+      "p_value": 0.0286,
+      "cohens_d": 2.881,
+      "significant": true,
+      "effect_magnitude": "large"
+    }
+  },
+  "anova": {
+    "F_statistic": 10.094,
+    "p_value": 0.0,
+    "significant": true,
+    "groups": [
+      "Scenario 1 (Diurnal)",
+      "Scenario 2 (Flash)",
+      "Scenario 3 (Sustained)",
+      "Scenario 4 (Slices)",
+      "Scenario 5 (Fault)",
+      "Scenario 6 (Anomaly)"
+    ],
+    "group_means": {
+      "Scenario 1 (Diurnal)": 76.57,
+      "Scenario 2 (Flash)": 87.53,
+      "Scenario 3 (Sustained)": 68.37,
+      "Scenario 4 (Slices)": 78.12,
+      "Scenario 5 (Fault)": 31.47,
+      "Scenario 6 (Anomaly)": 67.37
+    },
+    "group_stds": {
+      "Scenario 1 (Diurnal)": 22.57,
+      "Scenario 2 (Flash)": 13.95,
+      "Scenario 3 (Sustained)": 39.32,
+      "Scenario 4 (Slices)": 25.18,
+      "Scenario 5 (Fault)": 37.48,
+      "Scenario 6 (Anomaly)": 35.48
+    }
+  },
+  "cohens_d_pairs": {
+    "Scenario 1 (Diurnal) vs Scenario 2 (Flash)": -0.601,
+    "Scenario 1 (Diurnal) vs Scenario 3 (Sustained)": 0.26,
+    "Scenario 1 (Diurnal) vs Scenario 4 (Slices)": -0.063,
+    "Scenario 1 (Diurnal) vs Scenario 5 (Fault)": 1.398,
+    "Scenario 1 (Diurnal) vs Scenario 6 (Anomaly)": 0.308,
+    "Scenario 2 (Flash) vs Scenario 1 (Diurnal)": 0.601,
+    "Scenario 2 (Flash) vs Scenario 3 (Sustained)": 0.755,
+    "Scenario 2 (Flash) vs Scenario 4 (Slices)": 0.471,
+    "Scenario 2 (Flash) vs Scenario 5 (Fault)": 2.053,
+    "Scenario 2 (Flash) vs Scenario 6 (Anomaly)": 0.834,
+    "Scenario 3 (Sustained) vs Scenario 1 (Diurnal)": -0.26,
+    "Scenario 3 (Sustained) vs Scenario 2 (Flash)": -0.755,
+    "Scenario 3 (Sustained) vs Scenario 4 (Slices)": -0.304,
+    "Scenario 3 (Sustained) vs Scenario 5 (Fault)": 0.938,
+    "Scenario 3 (Sustained) vs Scenario 6 (Anomaly)": 0.026,
+    "Scenario 4 (Slices) vs Scenario 1 (Diurnal)": 0.063,
+    "Scenario 4 (Slices) vs Scenario 2 (Flash)": -0.471,
+    "Scenario 4 (Slices) vs Scenario 3 (Sustained)": 0.304,
+    "Scenario 4 (Slices) vs Scenario 5 (Fault)": 1.427,
+    "Scenario 4 (Slices) vs Scenario 6 (Anomaly)": 0.351,
+    "Scenario 5 (Fault) vs Scenario 1 (Diurnal)": -1.398,
+    "Scenario 5 (Fault) vs Scenario 2 (Flash)": -2.053,
+    "Scenario 5 (Fault) vs Scenario 3 (Sustained)": -0.938,
+    "Scenario 5 (Fault) vs Scenario 4 (Slices)": -1.427,
+    "Scenario 5 (Fault) vs Scenario 6 (Anomaly)": -0.952,
+    "Scenario 6 (Anomaly) vs Scenario 1 (Diurnal)": -0.308,
+    "Scenario 6 (Anomaly) vs Scenario 2 (Flash)": -0.834,
+    "Scenario 6 (Anomaly) vs Scenario 3 (Sustained)": -0.026,
+    "Scenario 6 (Anomaly) vs Scenario 4 (Slices)": -0.351,
+    "Scenario 6 (Anomaly) vs Scenario 5 (Fault)": 0.952
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "eMBB": {
+    "isolated_lat_p50_mean": 0.83075,
+    "combined_lat_p50_mean": 1.0824999999999998,
+    "delta_ms": 0.2517499999999998,
+    "interference_pct": 30.30394222088472
+  },
+  "mMTC": {
+    "isolated_lat_p50_mean": 0.45175,
+    "combined_lat_p50_mean": 1.0824999999999998,
+    "delta_ms": 0.6307499999999998,
+    "interference_pct": 139.62368566685112
+  },
+  "URLLC": {
+    "isolated_lat_p50_mean": 0.30325,
+    "combined_lat_p50_mean": 1.0824999999999998,
+    "delta_ms": 0.7792499999999998,
+    "interference_pct": 256.96619950535853
+  }
+}

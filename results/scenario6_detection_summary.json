@@ -1,0 +1,11 @@
+{
+  "max_anomaly_score": 0.67,
+  "mean_anomaly_score": 0.6639,
+  "threshold": 0.6,
+  "detected_at_s": 20.7,
+  "detection_within_target": true,
+  "hpa_scale_at_s": null,
+  "detection_to_hpa_latency": null,
+  "total_spike_rows": 9,
+  "rows_above_threshold": 9
+}

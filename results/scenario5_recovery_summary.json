@@ -1,0 +1,11 @@
+{
+  "fault_time": "2026-06-03T18:44:59.533236+00:00",
+  "pod_deleted": "upf-6bf7fc9b9b-9pg5v",
+  "new_pod": "upf-6bf7fc9b9b-llwr5",
+  "pod_running_s": 1.11,
+  "pod_ready_s": null,
+  "hpa_target_met": true,
+  "restarts_before": 37,
+  "restarts_after": 0,
+  "session_continuity_pct": 99.1
+}
