@@ -1,17 +1,22 @@
 {
-  "model": "ARIMA",
-  "order": [
+  "models": {
+    "ARIMA": 184.9934,
+    "SARIMA": 57.7333,
+    "Prophet": 409.298,
+    "Ensemble": 12.9309
+  },
+  "best_model": "Ensemble",
+  "best_mape": 12.930899470145166,
+  "baseline_mape": 3.64,
+  "improved": false,
+  "ensemble_weights": {
+    "arima": 0.0,
+    "sarima": 0.6910068074321088,
+    "prophet": 0.0
+  },
+  "arima_order": [
     2,
-    1,
-    1
-  ],
-  "train_samples": 8064,
-  "test_samples": 2016,
-  "forecast_steps": 360,
-  "mape_percent": 9.881358351343197,
-  "rmse": 27.999364786210016,
-  "mae": 22.734684555982415,
-  "aic": 68086.07232896611,
-  "bic": 68114.05249286485,
-  "augmented": true
+    0,
+    0
+  ]
 }

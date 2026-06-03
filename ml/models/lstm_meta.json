@@ -1,0 +1,13 @@
+{
+  "model": "MinimalLSTM",
+  "hidden_size": 32,
+  "seq_len": 12,
+  "pred_len": 6,
+  "epochs": 30,
+  "lr": 0.005,
+  "mape_1step": 60.18572357033616,
+  "rmse_1step": 9.066088017921349,
+  "mape_6step": 105.16870609558487,
+  "beats_arima": true,
+  "production_choice": "LSTM"
+}

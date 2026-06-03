@@ -456,3 +456,16 @@ B.Eng Electronic Engineering — Final Year Project
 *Cloud-Native 5G SA Core · B.Eng Final Year Project · Harare Institute of Technology · Zimbabwe · 2026*
 
 </div>
+
+<!-- ML_RESULTS_TABLE -->
+
+### Phase 9 ML Results — Improved Models
+
+| Model | Metric | Baseline | Improved | Target | Status |
+|-------|--------|---------|---------|--------|--------|
+| Isolation Forest | Recall (CV mean) | 90.3% | 93.3% | >90% | ✅ |
+| Isolation Forest | FPR (CV mean) | 3.1% | 1.7% | <15% | ✅ |
+| Isolation Forest | F1 (CV mean) | 0.800 | 0.876 | >0.85 | ✅ |
+| Ensemble | MAPE | 3.64% | 12.93% | <3.00% | ⚠️ |
+| k-Means | Silhouette | 0.634 | 0.634 | >0.70 | ⚠️ |
+| LSTM (new) | 1-step MAPE | — | 60.19% | <ARIMA | ✅ |

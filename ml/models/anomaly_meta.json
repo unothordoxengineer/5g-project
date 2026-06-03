@@ -1,23 +1,54 @@
 {
   "model": "IsolationForest",
   "n_estimators": 300,
-  "contamination": 0.07419354838709677,
-  "threshold": 0.5848932259184929,
+  "contamination": 0.07989690721649484,
+  "threshold": 0.5828843201624896,
   "features": [
     "cpu_upf",
     "upf_replicas",
     "cpu_amf"
   ],
-  "train_samples": 310,
-  "test_samples": 78,
-  "eval_on": "full_dataset",
   "recall": 0.9032258064516129,
-  "fpr": 0.03081232492997199,
-  "precision": 0.717948717948718,
-  "f1": 0.8,
+  "fpr": 0.01680672268907563,
+  "precision": 0.8235294117647058,
+  "f1": 0.8615384615384616,
+  "cv_recall_mean": 0.9333333333333333,
+  "cv_recall_std": 0.08164965809277258,
+  "cv_fpr_mean": 0.016823161189358372,
+  "cv_fpr_std": 0.005673600952831767,
+  "cv_f1_mean": 0.8760439560439559,
+  "cv_f1_std": 0.04358857387540046,
+  "score_ci_95": [
+    0.386290772195092,
+    0.4043347644980168
+  ],
+  "drift_detection": [
+    {
+      "feature": "cpu_upf",
+      "ks_stat": 0.31728701406120763,
+      "p_value": 4.721420424012345e-06,
+      "drift": true
+    },
+    {
+      "feature": "upf_replicas",
+      "ks_stat": 0.06451612903225806,
+      "p_value": 0.9400864534619525,
+      "drift": false
+    },
+    {
+      "feature": "cpu_amf",
+      "ks_stat": 0.2773366418527709,
+      "p_value": 9.612468895398366e-05,
+      "drift": true
+    }
+  ],
+  "shap_importance": {
+    "cpu_upf": 0.668942291270105,
+    "upf_replicas": 0.9624052135167933,
+    "cpu_amf": 0.8561490263353967
+  },
   "TP": 28,
-  "FP": 11,
+  "FP": 6,
   "FN": 3,
-  "TN": 346,
-  "augmented": false
+  "TN": 351
 }
