@@ -51,14 +51,14 @@ spec:
     spec:
       containers:
         - name: nrf
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-nrf:latest
+          image: open5gs-nrf:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_BIND_SERVICE"]
           args:
-            - /opt/open5gs/bin/open5gs-nrfd
+            - /usr/local/bin/open5gs-nrfd
             - -c
             - /etc/open5gs/nrf.yaml
           ports:
@@ -68,8 +68,8 @@ spec:
               memory: "64Mi"
               cpu: "50m"
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "128Mi"      # tuned: Phase 6 NRF peak <80Mi; registration-only NF
+              cpu: "200m"          # tuned: NRF is light — no user-plane processing
           readinessProbe:
             exec:
               command:
@@ -91,8 +91,9 @@ spec:
                 - --max-time
                 - "3"
                 - http://127.0.0.1/nnrf-nfm/v1/nf-instances
-            initialDelaySeconds: 15
-            periodSeconds: 30
+            initialDelaySeconds: 30   # tuned: full NRF boot before restart risk
+            periodSeconds: 15         # tuned: responsive without thrashing
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/open5gs/nrf.yaml

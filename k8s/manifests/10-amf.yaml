@@ -87,14 +87,14 @@ spec:
     spec:
       containers:
         - name: amf
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-amf:latest
+          image: open5gs-amf:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_BIND_SERVICE"]
           args:
-            - /opt/open5gs/bin/open5gs-amfd
+            - /usr/local/bin/open5gs-amfd
             - -c
             - /etc/open5gs/amf.yaml
           ports:
@@ -110,18 +110,29 @@ spec:
               memory: "128Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "1000m"
+              memory: "256Mi"      # tuned: Phase 6 AMF peak <200Mi under 200 UEs
+              cpu: "500m"          # tuned: NAS crypto is bursty; 500m covers peaks
+          startupProbe:
+            # AMF bootstraps NRF registration + NGAP listener before serving.
+            # Allow up to 30 × 10s = 300s for startup before liveness kicks in.
+            # tcpSocket (not httpGet) — Open5GS SBI uses HTTP/2 prior-knowledge;
+            # httpGet probes speak HTTP/1.1 which AMF rejects as "bad client magic".
+            tcpSocket:
+              port: 80
+            failureThreshold: 30
+            periodSeconds: 10
           readinessProbe:
             tcpSocket:
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
+            failureThreshold: 3
           livenessProbe:
             exec:
               command: ["pgrep", "-x", "open5gs-amfd"]
-            initialDelaySeconds: 15
-            periodSeconds: 30
+            initialDelaySeconds: 30   # tuned: after startupProbe clears
+            periodSeconds: 15         # tuned: catch deadlocks faster than 30s
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/open5gs/amf.yaml

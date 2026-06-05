@@ -68,7 +68,7 @@ spec:
     spec:
       containers:
         - name: gnb
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-gnb:latest
+          image: ueransim-gnb:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/gnb-entrypoint.sh"]
           env:
@@ -85,11 +85,11 @@ spec:
               name: gtpu
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "50m"
+              memory: "128Mi"      # tuned: gNB holds NGAP context + GTP-U buffers
+              cpu: "100m"          # tuned: NGAP signalling + RRC emulation baseline
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "256Mi"      # tuned: sufficient for 1 simulated cell
+              cpu: "300m"          # tuned: burst during attach storms
           securityContext:
             capabilities:
               add: ["NET_ADMIN"]

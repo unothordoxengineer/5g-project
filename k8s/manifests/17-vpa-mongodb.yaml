@@ -1,0 +1,88 @@
+# =============================================================================
+# Vertical Pod Autoscaler — MongoDB (Open5GS subscriber data store)
+# =============================================================================
+#
+# What this does
+# --------------
+# VPA continuously monitors MongoDB's actual CPU and memory usage via the
+# VPA Recommender and records what the optimal resource request should be.
+# With updateMode: "Off" it ONLY produces recommendations — it never restarts
+# the pod to apply them.  The operator reviews recommendations via:
+#
+#   kubectl describe vpa mongodb-vpa -n open5gs
+#
+# and then manually applies them to the StatefulSet when convenient.
+#
+# Why "Off" mode for MongoDB
+# --------------------------
+# MongoDB is a StatefulSet with a persistent PVC.  Auto-applying VPA
+# recommendations (modes "Auto" or "Recreate") would restart the pod,
+# causing a brief subscriber-data unavailability that would break ongoing
+# UDR queries.  "Off" mode is the safe choice for stateful workloads in lab
+# and production alike until a MongoDB replica set (HA) is configured.
+#
+# Installation (if VPA CRD is not installed on your kind cluster)
+# ---------------------------------------------------------------
+# VPA is NOT bundled with kind.  Install it manually:
+#
+#   git clone https://github.com/kubernetes/autoscaler.git /tmp/autoscaler
+#   cd /tmp/autoscaler/vertical-pod-autoscaler
+#   ./hack/vpa-install.sh
+#
+# Alternatively, with Helm:
+#   helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+#   helm install vpa fairwinds-stable/vpa \
+#     --namespace kube-system \
+#     --set recommender.enabled=true \
+#     --set updater.enabled=false \
+#     --set admissionController.enabled=false
+#
+# Then apply this manifest:
+#   kubectl apply -f k8s/manifests/17-vpa-mongodb.yaml
+#
+# Verifying recommendations (after ~30 min of workload)
+# -------------------------------------------------------
+#   kubectl describe vpa mongodb-vpa -n open5gs
+#   # Look for the "Recommendation" section showing target/lowerBound/upperBound
+#   # for each container.
+#
+# Resource policy bounds
+# ----------------------
+# minAllowed: Minimum safe floor.  Below 100m CPU MongoDB query threads starve;
+#             below 128Mi memory WiredTiger cache is too small for the
+#             subscriber data index.
+# maxAllowed: Upper guard rail.  1 CPU is sufficient for the 1,024-UE lab
+#             scale.  1Gi memory gives WiredTiger ~500Mi cache after OS
+#             overhead — adequate for the Open5GS subscriber collections.
+# =============================================================================
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: mongodb-vpa
+  namespace: open5gs
+  labels:
+    component: autoscaling
+    app: mongodb
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: mongodb
+  updatePolicy:
+    # "Off" — recommends only; never restarts the pod automatically.
+    # Change to "Auto" only after deploying a 3-member MongoDB replica set.
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: mongodb
+        minAllowed:
+          cpu: 100m
+          memory: 128Mi
+        maxAllowed:
+          cpu: 1000m
+          memory: 1Gi
+        # VPA will recommend values between min and max based on observed usage.
+        # Controlled mode means VPA can adjust requests but not above max limits.
+        controlledResources: ["cpu", "memory"]
+        controlledValues: RequestsAndLimits

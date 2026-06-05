@@ -63,7 +63,7 @@ data:
     # UPF entrypoint — start open5gs-upfd then configure ogstun + NAT
 
     # Start UPF daemon in background
-    /opt/open5gs/bin/open5gs-upfd -c /etc/open5gs/upf.yaml &
+    /usr/local/bin/open5gs-upfd -c /etc/open5gs/upf.yaml &
     UPF_PID=$!
 
     # Wait for ogstun to appear (UPF creates it on startup)
@@ -107,12 +107,12 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: upf
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-upf:latest
+          image: open5gs-upf:latest
           imagePullPolicy: IfNotPresent
           # Use gradiant entrypoint — creates ogstun via 'ip tuntap' (netlink) before
           # running upfd, avoiding the direct TUNSETIFF ioctl that fails on EKS.
           args:
-            - /opt/open5gs/bin/open5gs-upfd
+            - /usr/local/bin/open5gs-upfd
             - -c
             - /etc/open5gs/upf.yaml
           ports:
@@ -126,11 +126,11 @@ spec:
               name: metrics
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "256Mi"      # tuned: GTP-U socket buffers + tun needs 256Mi floor
+              cpu: "200m"          # tuned: idle UPF ~50m; 200m request ensures scheduling
             limits:
-              memory: "512Mi"
-              cpu: "1000m"
+              memory: "512Mi"      # tuned: Phase 6 peak <400Mi at 200 UEs sustained
+              cpu: "1000m"         # unchanged: HPA adds replicas before single-pod limit
           securityContext:
             privileged: true          # NET_ADMIN + SYS_MODULE + iptables
             runAsUser: 0              # root required for ip tuntap + iptables
@@ -163,11 +163,13 @@ spec:
               command: ["pgrep", "-x", "open5gs-upfd"]
             initialDelaySeconds: 10
             periodSeconds: 10
+            failureThreshold: 3
           livenessProbe:
             exec:
               command: ["pgrep", "-x", "open5gs-upfd"]
-            initialDelaySeconds: 20
-            periodSeconds: 30
+            initialDelaySeconds: 30   # tuned: UPF tun/NAT setup before restart risk
+            periodSeconds: 15         # tuned: catch kernel-lock faster than 30s
+            failureThreshold: 3
           volumeMounts:
             - name: upf-config
               mountPath: /etc/open5gs/upf.yaml

@@ -28,11 +28,11 @@ spec:
             - containerPort: 27017
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "256Mi"      # tuned: WiredTiger cache min + journal + index
+              cpu: "200m"          # tuned: subscriber attach queries are bursty
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "512Mi"      # tuned: 512Mi → ~256Mi WiredTiger cache at 1024 UEs
+              cpu: "500m"          # tuned: single-threaded queries peak under lab load
           # tcpSocket probe: mongosh startup takes >1s which exceeds the default
           # 1s probe timeout. A TCP check on port 27017 is sufficient — if the
           # socket is accepting connections MongoDB is ready to serve queries.
@@ -45,8 +45,9 @@ spec:
           livenessProbe:
             tcpSocket:
               port: 27017
-            initialDelaySeconds: 30
-            periodSeconds: 30
+            initialDelaySeconds: 30   # tuned: WiredTiger journal replay on crash-restart
+            periodSeconds: 15         # tuned: detect MongoDB hang faster
+            failureThreshold: 3
           volumeMounts:
             - name: mongodb-data
               mountPath: /data/db

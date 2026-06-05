@@ -119,17 +119,17 @@ spec:
     spec:
       containers:
         - name: ue
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          image: ueransim-ue:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
           ports: []
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "50m"
+              memory: "128Mi"      # tuned: UE holds NAS context + PDU session state
+              cpu: "100m"          # tuned: NAS/RRC processing + uesimtun0 I/O
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "256Mi"      # tuned: 1 simulated UE with 3 active slices
+              cpu: "300m"          # tuned: burst during PDU session establishment
           securityContext:
             capabilities:
               add: ["NET_ADMIN"]

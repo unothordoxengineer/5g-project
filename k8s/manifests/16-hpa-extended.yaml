@@ -1,0 +1,111 @@
+# =============================================================================
+# Extended HPA — AMF and SMF autoscaling (Open5GS 5G SA Core)
+# =============================================================================
+#
+# 3GPP Architecture rationale for per-NF scaling parameters:
+#
+# AMF (Access and Mobility Management Function — TS 23.501 §6.2.6)
+#   • Processes N1 (NAS) and N2 (NGAP/NG-AP) messages for every UE attach,
+#     re-registration, and handover.
+#   • CPU is the primary bottleneck: NAS security (NIA2/NEA2) is AES-based
+#     and is computed per message.
+#   • Scaling target: 70% CPU — same as UPF.  At 70%, AMF has headroom to
+#     absorb a registration storm (flash crowd) before the next scale event.
+#   • max=3: AMF is stateful per UE (UE context lives in the pod).  Horizontal
+#     scaling requires a shared context store (e.g. Redis) in production.  For
+#     this lab, max=3 limits disruption from partial context loss on scale-out.
+#   • min=1: AMF must always have at least one Running pod (see also amf-pdb).
+#
+# SMF (Session Management Function — TS 23.501 §6.2.7)
+#   • Processes PDU Session Establishment/Modification/Release (N11 with AMF,
+#     N7 with PCF, N4 with UPF).  Each new data session consumes one PFCP
+#     association on the UPF.
+#   • CPU scales with session rate.  Memory scales with concurrent session
+#     state (SMF stores PDU context in-process).
+#   • Scaling target: 70% CPU — consistent with AMF and UPF to allow uniform
+#     HPA trigger thresholds across the signalling plane.
+#   • max=3: PFCP associations with UPF are per-SMF-pod.  Scale-out fragments
+#     associations; max=3 limits the number of N4 paths the single UPF must
+#     track.  A production deployment would use a PFCP load balancer.
+#   • min=1: At least one SMF must be Running to accept new session requests.
+#
+# Behaviour tuning (scaleUp/scaleDown):
+#   • scaleUp stabilizationWindow=30s: fast reaction to signalling spikes
+#     (matches UPF HPA — see 12-upf.yaml).
+#   • scaleDown stabilizationWindow=300s: 5-minute cooldown prevents flapping.
+#     SMF session state must drain before a pod terminates; the longer window
+#     gives in-flight sessions time to complete.
+# =============================================================================
+
+# ── AMF Horizontal Pod Autoscaler ────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: amf-hpa
+  namespace: open5gs
+  labels:
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: amf
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # 70% of the 500m limit → triggers at ~350m
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30     # react quickly to UE registration storms
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60              # add one replica per minute under load
+    scaleDown:
+      stabilizationWindowSeconds: 300    # 5-min cooldown — drain in-flight NAS msgs
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120             # remove one replica every 2 min on cooldown
+
+---
+# ── SMF Horizontal Pod Autoscaler ────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: smf-hpa
+  namespace: open5gs
+  labels:
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: smf
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # 70% of the 500m limit → triggers at ~350m
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30     # fast reaction to PDU session spikes
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300    # 5-min cooldown for PFCP session drain
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

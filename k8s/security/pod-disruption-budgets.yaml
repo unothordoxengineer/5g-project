@@ -1,0 +1,220 @@
+# =============================================================================
+# Pod Disruption Budgets — Open5GS 5G SA Core
+# =============================================================================
+#
+# Purpose: Guarantee that rolling upgrades, node drains, and voluntary
+# disruptions never leave a critical Network Function with zero running
+# replicas.  This is the Kubernetes equivalent of carrier-grade "no-single-
+# point-of-failure" requirements from 3GPP TS 23.501 §5.17.
+#
+# Design rules applied:
+#   minAvailable: 1  — always keep at least one pod accepting traffic.
+#   For NFs with HPA (upf, amf, smf) this means the HPA minimum is always
+#   protected; a node drain can only proceed once a replacement is Running.
+#
+# Note: PDBs only block *voluntary* disruptions (kubectl drain, cluster
+# upgrades).  Pod crashes and OOMKills are *involuntary* and are handled by
+# the Deployment controller + liveness probes, not PDBs.
+# =============================================================================
+
+# ── Tier 1: Network Repository Function ──────────────────────────────────────
+# All NFs register here.  Loss of NRF breaks service discovery for the entire
+# core.  Even 1 available replica is mandatory during maintenance.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nrf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "1"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nrf
+---
+# ── Tier 1: Service Communication Proxy ──────────────────────────────────────
+# SCP routes all SBI messages between NFs.  Unavailability breaks inter-NF
+# communication across the entire core simultaneously.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scp-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "1"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: scp
+---
+# ── Tier 2: Data Repository Functions ────────────────────────────────────────
+# UDR is the subscriber data store.  UDM and AUSF depend on it for
+# authentication.  Loss during a rolling update would fail all new attach
+# attempts.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: udr-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "2"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: udr
+---
+# ── Tier 3: Unified Data Management ──────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: udm-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "3"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: udm
+---
+# ── Tier 3: Authentication Server Function ───────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ausf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "3"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ausf
+---
+# ── Tier 4: Policy Control Function ──────────────────────────────────────────
+# PCF enforces QoS policies for each PDU session.  Loss means sessions
+# fall back to default bearer — acceptable briefly but not during maintenance.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pcf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "4"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pcf
+---
+# ── Tier 4: Binding Support Function ─────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bsf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "4"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bsf
+---
+# ── Tier 4: Network Slice Selection Function ──────────────────────────────────
+# NSSF maps UE slice selection assistance information to AMF sets.
+# Loss would prevent new UEs from being directed to the correct slice.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nssf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "4"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nssf
+---
+# ── Tier 5: Access and Mobility Management Function ───────────────────────────
+# AMF handles all UE registration (3GPP N1/N2).  Downtime means no new
+# registrations and no handovers.  Extended HPA (16-hpa-extended.yaml) may
+# raise replicas above 1; PDB guarantees at least 1 survives a node drain.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: amf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "5"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: amf
+---
+# ── Tier 5: Session Management Function ──────────────────────────────────────
+# SMF manages PDU session lifecycle and N4 (PFCP) to UPF.  Loss means
+# new data sessions cannot be established.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: smf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "5"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: smf
+---
+# ── Tier 6: User Plane Function ───────────────────────────────────────────────
+# UPF carries all user-plane GTP-U traffic.  Loss means active data sessions
+# drop.  HPA may run 1–5 replicas; PDB ensures at least 1 survives drains.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: upf-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "6"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: upf
+---
+# ── Data Plane: MongoDB ───────────────────────────────────────────────────────
+# MongoDB stores subscriber data (UDR), PCF policies, and BSF bindings.
+# StatefulSet with 1 replica; PDB prevents concurrent drain + pod failure.
+# In production, MongoDB would run as a 3-member replica set with
+# minAvailable: 2 to ensure quorum.  For this FYP lab, 1 is sufficient.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mongodb-pdb
+  namespace: open5gs
+  labels:
+    component: stability
+    tier: "data"
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mongodb

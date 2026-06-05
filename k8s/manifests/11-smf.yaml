@@ -90,14 +90,14 @@ spec:
     spec:
       containers:
         - name: smf
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/open5gs-smf:latest
+          image: open5gs-smf:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
             capabilities:
               add: ["NET_BIND_SERVICE"]
           args:
-            - /opt/open5gs/bin/open5gs-smfd
+            - /usr/local/bin/open5gs-smfd
             - -c
             - /etc/open5gs/smf.yaml
           ports:
@@ -113,13 +113,29 @@ spec:
               memory: "128Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "1000m"
+              memory: "256Mi"      # tuned: SMF session state <200Mi under 200 UEs
+              cpu: "500m"          # tuned: PFCP encoding is CPU-light; peaks at ~350m
+          startupProbe:
+            # SMF must connect to UPF via PFCP (N4) and register with NRF before
+            # it is ready. Allow up to 30 × 10s = 300s for full initialisation.
+            # tcpSocket (not httpGet) — Open5GS SBI uses HTTP/2 prior-knowledge;
+            # httpGet probes speak HTTP/1.1 which SMF rejects as "bad client magic".
+            tcpSocket:
+              port: 80
+            failureThreshold: 30
+            periodSeconds: 10
           readinessProbe:
             tcpSocket:
               port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-x", "open5gs-smfd"]
+            initialDelaySeconds: 30   # tuned: after startupProbe clears
+            periodSeconds: 15         # tuned: detect PFCP dead-lock faster
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/open5gs/smf.yaml
