@@ -474,6 +474,14 @@ spec:
       ports:
         - port: 27017
           protocol: TCP
+    # WebUI → MongoDB: subscriber management UI
+    - from:
+        - podSelector:
+            matchLabels:
+              app: webui
+      ports:
+        - port: 27017
+          protocol: TCP
   egress: []   # MongoDB originates no connections
 
 ---
@@ -989,4 +997,45 @@ spec:
             cidr: 10.96.0.1/32
       ports:
         - port: 443
+          protocol: TCP
+---
+# =============================================================================
+# WebUI — Subscriber Management UI
+#
+# Ingress:  port 9999 from any (operator access)
+# Egress:   MongoDB port 27017 (subscriber CRUD), DNS port 53
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-webui
+  namespace: open5gs
+  annotations:
+    security.open5gs/reason: "WebUI needs inbound on 9999 and outbound to MongoDB only"
+spec:
+  podSelector:
+    matchLabels:
+      app: webui
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Operator/browser access on port 9999
+    - ports:
+        - port: 9999
+          protocol: TCP
+  egress:
+    # DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # MongoDB subscriber data
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mongodb
+      ports:
+        - port: 27017
           protocol: TCP

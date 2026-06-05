@@ -1,0 +1,99 @@
+# =============================================================================
+# WebUI — Open5GS Subscriber Management UI (Tier 9)
+#
+# Connects to MongoDB via internal DNS (mongodb:27017).
+# Exposed on NodePort 30999 for direct access; port-forward to 9999 for dev.
+#
+# Login: admin / 1423
+#
+# NOTE: The gradiant/open5gs-webui:2.7.2 image hardcodes serverSelectionTimeoutMS=1000
+# in server/index.js. The initContainer waits for MongoDB to accept TCP connections
+# before the main container starts, ensuring MongoDB is ready within the 1s window.
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webui
+  namespace: open5gs
+  labels:
+    app: webui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webui
+  template:
+    metadata:
+      labels:
+        app: webui
+    spec:
+      initContainers:
+        # Wait for MongoDB to be ready before starting WebUI.
+        # The gradiant image hardcodes serverSelectionTimeoutMS=1000ms;
+        # without this guard the WebUI crashes on every pod start.
+        - name: wait-for-mongodb
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "[wait-for-mongodb] polling mongodb:27017..."
+              until nc -z mongodb 27017 2>/dev/null; do
+                echo "[wait-for-mongodb] not ready, retrying in 2s..."
+                sleep 2
+              done
+              echo "[wait-for-mongodb] MongoDB is ready"
+      containers:
+        - name: webui
+          image: gradiant/open5gs-webui:2.7.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9999
+              name: http
+          env:
+            - name: DB_URI
+              value: mongodb://mongodb/open5gs
+            - name: PORT
+              value: "9999"
+            - name: NODE_ENV
+              value: production
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9999
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9999
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webui
+  namespace: open5gs
+  labels:
+    app: webui
+spec:
+  selector:
+    app: webui
+  type: NodePort
+  ports:
+    - name: http
+      port: 9999
+      targetPort: 9999
+      nodePort: 30999
+      protocol: TCP

@@ -2,6 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "open5gs-webui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 9999,
+      "cwd": "/Users/nigelkadzunga/5g-project/open5gs/webui",
+      "env": {
+        "DB_URI": "mongodb://localhost/open5gs",
+        "PORT": "9999"
+      }
+    },
+    {
       "name": "NRF (NF Repository Function)",
       "runtimeExecutable": "/Users/nigelkadzunga/5g-project/open5gs/build/src/nrf/open5gs-nrfd",
       "runtimeArgs": ["-c", "/Users/nigelkadzunga/5g-project/open5gs/build/configs/open5gs/nrf.yaml"],
