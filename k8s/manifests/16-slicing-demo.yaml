@@ -199,7 +199,7 @@ spec:
     spec:
       containers:
         - name: ue2
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          image: ueransim-ue:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
           securityContext:
@@ -331,7 +331,7 @@ spec:
     spec:
       containers:
         - name: ue3
-          image: 749534910877.dkr.ecr.us-east-1.amazonaws.com/5g-core/ueransim-ue:latest
+          image: ueransim-ue:latest
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/usr/local/bin/ue-entrypoint.sh"]
           securityContext:

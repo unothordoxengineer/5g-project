@@ -49,15 +49,15 @@ spec:
               cpu: 200m
               memory: 256Mi
           readinessProbe:
-            httpGet:
-              path: /
+            # tcpSocket: avoids triggering a full Next.js SSR render on every probe.
+            # httpGet / with timeout=1s was killing the pod (SSR takes >1s cold).
+            tcpSocket:
               port: 9999
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 9999
             initialDelaySeconds: 40
             periodSeconds: 15
