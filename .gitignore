@@ -16,3 +16,6 @@ terraform/.terraform/
 
 # Claude worktrees
 .claude/worktrees/
+
+# TLS private keys — never commit; generate with k8s/security/certs/gen-certs.sh
+k8s/security/certs/*-key.pem

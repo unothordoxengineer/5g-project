@@ -1,0 +1,141 @@
+# =============================================================================
+# NRF TLS Test Pod — Priority 7 mTLS investigation
+#
+# SAFE: uses port 8443 (not 80), separate pod name "nrf-tls-test",
+# does NOT modify or restart the main "nrf" deployment.
+# This pod's sole purpose: verify Open5GS TLS SBI startup succeeds
+# and that the HTTPS endpoint is reachable inside the cluster.
+#
+# If this crashes, the 19-pod production cluster is unaffected.
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nrf-tls-test-config
+  namespace: open5gs
+data:
+  nrf.yaml: |
+    logger:
+      level: info
+
+    global:
+      max:
+        ue: 1024
+
+    nrf:
+      serving:
+        - plmn_id:
+            mcc: 999
+            mnc: 70
+      # context.c:227-233: "default" is parsed as a child of the local NF key ("nrf"),
+      # not at root level. Must be nested here as a sibling of "sbi:".
+      default:
+        tls:
+          server:
+            scheme: https
+            private_key: /etc/open5gs/tls/tls.key
+            cert: /etc/open5gs/tls/tls.crt
+            verify_client: false
+          client:
+            scheme: https
+            cacert: /etc/open5gs/ca/ca-cert.pem
+      sbi:
+        server:
+          - address: 0.0.0.0
+            port: 8443
+            advertise: nrf-tls-test
+
+    time:
+      nf_instance:
+        validity: 86400
+        heartbeat: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nrf-tls-test
+  namespace: open5gs
+  labels:
+    app: nrf-tls-test
+    priority7: mtls-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nrf-tls-test
+  template:
+    metadata:
+      labels:
+        app: nrf-tls-test
+        priority7: mtls-test
+    spec:
+      containers:
+        - name: nrf
+          image: open5gs-nrf:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+          args:
+            - /usr/local/bin/open5gs-nrfd
+            - -c
+            - /etc/open5gs/nrf.yaml
+          ports:
+            - containerPort: 8443
+              name: sbi-tls
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          # tcpSocket probe: simpler than curl https:// — just verify port binds
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/open5gs/nrf.yaml
+              subPath: nrf.yaml
+            - name: tls-cert
+              mountPath: /etc/open5gs/tls
+              readOnly: true
+            - name: ca
+              mountPath: /etc/open5gs/ca
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: nrf-tls-test-config
+        - name: tls-cert
+          secret:
+            secretName: nrf-tls        # tls.crt + tls.key
+        - name: ca
+          secret:
+            secretName: ca-cert        # ca-cert.pem
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nrf-tls-test
+  namespace: open5gs
+  labels:
+    app: nrf-tls-test
+spec:
+  selector:
+    app: nrf-tls-test
+  ports:
+    - name: sbi-tls
+      port: 8443
+      targetPort: 8443

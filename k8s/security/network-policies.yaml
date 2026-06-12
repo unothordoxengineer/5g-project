@@ -1,6 +1,30 @@
 # =============================================================================
 # NetworkPolicies — Open5GS 5G Core Security Hardening
 #
+# MTLS LAYERING NOTE (Priority 7):
+#   NetworkPolicy and mTLS are complementary, not redundant, security layers:
+#
+#   NetworkPolicy (this file) — Layer 3/4, enforced by kindnet nfqueue:
+#     - Controls WHICH pods can send TCP packets to WHICH pods/ports.
+#     - Does not inspect payload; cannot verify NF identity.
+#     - Defends against pod IP spoofing and lateral movement after a compromise.
+#
+#   mTLS (Open5GS TLS / Istio) — Layer 4/7, enforced in the TLS stack:
+#     - Cryptographically verifies NF identity via X.509 certificates.
+#     - Encrypts SBI payload (SUPI, authentication vectors, session data).
+#     - Defends against eavesdropping and impersonation on the wire.
+#
+#   Together: even if a NetworkPolicy rule allows traffic from pod A to pod B,
+#   mTLS ensures pod A must present a valid certificate (signed by the cluster
+#   CA) before the connection is accepted.  A compromised pod that spoofs its
+#   IP/label would still fail the mTLS handshake.
+#
+#   When upgrading to mTLS (Istio ambient mode or Open5GS native TLS):
+#     - Update port references from 80 → 443 in all SBI allow rules below.
+#     - Add port 443 to each Ingress/Egress rule that currently permits port 80.
+#     - Retain port 80 during the migration window for backward compatibility.
+#     - After all NFs confirm https:// registration with NRF, remove port 80.
+#
 # IMPORTANT — CNI enforcement note:
 #   This cluster uses kindnet (KinD ≥ 0.23), which DOES enforce NetworkPolicy
 #   rules via nfqueue (netfilter queue 101).  A userspace daemon evaluates
