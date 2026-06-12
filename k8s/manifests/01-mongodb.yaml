@@ -39,15 +39,15 @@ spec:
           readinessProbe:
             tcpSocket:
               port: 27017
-            initialDelaySeconds: 10
+            initialDelaySeconds: 20   # tuned: WiredTiger recovery starts immediately
             periodSeconds: 10
-            failureThreshold: 5
+            failureThreshold: 10      # tuned: 120s window — log recovery can take >60s
           livenessProbe:
             tcpSocket:
               port: 27017
-            initialDelaySeconds: 30   # tuned: WiredTiger journal replay on crash-restart
-            periodSeconds: 15         # tuned: detect MongoDB hang faster
-            failureThreshold: 3
+            initialDelaySeconds: 90   # tuned: WiredTiger log recovery on M1 kind takes ~75-90s
+            periodSeconds: 15
+            failureThreshold: 5       # tuned: 165s total window before kill
           volumeMounts:
             - name: mongodb-data
               mountPath: /data/db
