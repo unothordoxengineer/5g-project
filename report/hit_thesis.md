@@ -136,17 +136,17 @@ This research was conducted at HIT during the period January–June 2026 as a Fi
 
 ## ABSTRACT
 
-**Background:** The fifth generation (5G) mobile network standard requires operators to transition from purpose-built, monolithic hardware to disaggregated, software-defined, cloud-native network functions. African telecommunications operators face a structural barrier: traditional Evolved Packet Core (EPC) hardware costs exceed USD 3.2 million per deployment, procurement cycles extend 12–18 weeks, and existing infrastructure lacks the intelligent automation needed for cost-efficient operation at scale.
+**Background:** Traditional 5G core hardware costs exceed USD 3.2 million per deployment, with 12–18 week procurement cycles and no intelligent automation. African operators cannot absorb these costs at the subscriber scales typical of developing markets.
 
-**Purpose:** This study designed, implemented, and evaluated a production-representative, fully 3GPP Release 16-compliant 5G Standalone (SA) Core Network as a cloud-native application, augmented by an integrated AI/ML pipeline for autonomous network management and deployed to Amazon Web Services (AWS) Elastic Kubernetes Service (EKS), with the objective of demonstrating economic viability for African telecoms operators.
+**Purpose:** This study designed, implemented, and evaluated a fully 3GPP Release 16-compliant 5G Standalone (SA) Core as a cloud-native application with an integrated AI/ML pipeline for autonomous network management, deployed to Amazon Web Services (AWS) Elastic Kubernetes Service (EKS), to demonstrate economic viability for African telecoms operators.
 
-**Methods:** Open5GS v2.7.2 was compiled from source on Apple Silicon (M1 macOS Tahoe), containerised as 14 individual Docker images, and orchestrated on a four-node Kubernetes cluster using 19 production manifests. Three 3GPP network slices (eMBB, mMTC, URLLC) were implemented with full QoS differentiation. Four machine learning models — Isolation Forest (anomaly detection), k-Means clustering (state classification), ARIMA/SARIMA/Prophet/LSTM ensemble (traffic forecasting), and DBSCAN (density-based clustering) — were trained on 388 synthetic time-series samples and validated through 5-fold cross-validation with SHAP explainability analysis. The system was stress-tested across six scenarios including slice isolation, fault injection, and anomaly validation. The complete stack was deployed to AWS EKS with Amazon Managed Prometheus (AMP), Amazon SageMaker BYOC endpoints, and Amazon Bedrock Claude integration for AI-driven operations. A comprehensive economic analysis compared cloud and on-premise total cost of ownership (TCO).
+**Methods:** Open5GS v2.7.2 was compiled from source on Apple Silicon, containerised as 14 Docker images, and orchestrated on a four-node Kubernetes cluster. Three network slices (eMBB, mMTC, URLLC) were implemented with QoS differentiation. An Isolation Forest (anomaly detection), k-Means (state classification), and SARIMA/Prophet ensemble (traffic forecasting) were trained on 388 samples and validated through 5-fold cross-validation with SHAP explainability. The system was stress-tested across six scenarios. The full stack was deployed to AWS EKS with Amazon Managed Prometheus, SageMaker BYOC endpoints, and Amazon Bedrock for AI-driven operations.
 
-**Key Results:** The Isolation Forest achieved cross-validated recall of 93.3% ± 8.2% (FPR 1.7% ± 0.6%, F1 = 0.876), exceeding the >90% target; SHAP analysis identified UPF replica count as the dominant anomaly predictor (feature importance 0.962). The SARIMA/Prophet ensemble achieved MAPE of 12.93% on real diurnal traffic data. Slice isolation testing confirmed statistically significant QoS differentiation (ANOVA F = 10.09, p < 0.0001; URLLC p50 = 0.30 ms vs. eMBB p50 = 0.83 ms, Cohen's d = 2.05). Autonomous fault recovery achieved mean restoration in 1.11 seconds against a 30-second target — 27× better than specified. Anomaly detection latency was 20.7 seconds against a 90-second target. AWS deployment consumed USD 32.36 over seven days across 15 container images, 22 Prometheus scrape targets (2.66 GB metrics), and three SageMaker endpoints. Economic modelling demonstrated a 99.4% TCO reduction versus on-premise hardware, with break-even at 70 subscribers and 2.7 months. Annual CO₂ savings were estimated at 35.1 tonnes. All three network slices were verified on AWS EKS with URLLC achieving 1.4 ms round-trip time.
+**Key Results:** Isolation Forest achieved cross-validated recall of 93.3% ± 8.2% (FPR 1.7%, F1 = 0.876); SHAP identified UPF replica count as the dominant anomaly predictor (importance 0.962). The forecasting ensemble achieved MAPE 12.93% on real diurnal data. Slice isolation confirmed statistically significant QoS differentiation (F = 10.09, p < 0.0001; URLLC p50 = 0.30 ms vs. eMBB 0.83 ms, Cohen's d = 2.05). Fault recovery averaged 1.11 s (target: 30 s). AWS deployment cost USD 32.36 over seven days. Economic modelling yielded 99.4% TCO reduction versus on-premise, with break-even at 70 subscribers.
 
-**Conclusions:** A fully compliant, production-instrumented, AI-augmented 5G SA Core can be deployed on commodity cloud infrastructure at a fraction of traditional cost. The quantified economic case — 99.4% TCO reduction, 93,165% AI ROI — establishes cloud-native 5G as a technically and economically viable pathway for African operators operating under the constraints of limited CAPEX and high-volatility subscriber bases.
+**Conclusions:** A production-instrumented, AI-augmented 5G SA Core can be deployed on commodity cloud infrastructure at a fraction of traditional cost. A 99.4% TCO reduction and 70-subscriber break-even establish cloud-native 5G as immediately viable for African community network operators.
 
-**Keywords:** 5G Standalone Core, Open5GS, Kubernetes, Cloud-Native, Machine Learning, Anomaly Detection, SHAP, Network Slicing, AWS EKS, SageMaker, Amazon Bedrock, Economic Analysis, African Telecommunications.
+**Keywords:** 5G Standalone Core, Open5GS, Kubernetes, Cloud-Native, Machine Learning, SHAP, Network Slicing, AWS EKS, SageMaker, Amazon Bedrock, Economic Analysis, African Telecommunications.
 
 ---
 
@@ -345,7 +345,6 @@ This research was conducted at HIT during the period January–June 2026 as a Fi
 | Figure | Caption | Page |
 |---|---|---|
 | Figure 3.1 | Overall System Architecture: Local + AWS with AI/ML Pipeline | 51 |
-| Figure 4.1 | UE Registration Sequence Diagram | 99 |
 | Figure 4.2 | Scenario 1: Diurnal Load Pattern — CPU Utilisation, Replica Count, and Latency Percentiles | 120 |
 | Figure 4.3 | Scenario 2: Flash Crowd — CPU Spike Timeline, HPA Response, and Latency | 122 |
 | Figure 4.4 | Scenario 2: HPA Response Time per Repetition | 122 |
@@ -934,6 +933,10 @@ The complete system architecture comprises two deployment environments connected
 - Security: IRSA (OIDC-based IAM roles for Kubernetes service accounts, no static credentials)
 
 The PLMN identity used throughout is MCC=999, MNC=70 — the ITU-designated test PLMN reserved for laboratory use, ensuring no interference with any deployed public mobile network.
+
+![Figure 3.1: Overall System Architecture — Local Development and AWS Cloud Deployment with AI/ML Pipeline](../docs/architecture.png)
+
+**Figure 3.1: Overall System Architecture showing the two-environment deployment. Left: local kind cluster on M1 macOS with 14 Open5GS NFs, UERANSIM UE/gNB, and Prometheus scraping. Right: AWS EKS with ECR images, AMP, AMG, SageMaker BYOC endpoints, Bedrock AI advisor, S3 model storage, and SNS alerting. The closed-loop automation engine bridges both environments via PromQL queries and kubectl scaling commands.**
 
 ## 3.3 Phase 1: 5G Core Build Methodology
 
@@ -1757,6 +1760,16 @@ Bootstrap confidence intervals (B=5,000 resamples) were computed for the four pr
 All four metrics exceed their performance targets with 95% confidence. The wide recall CI ([77.4%, 100%]) reflects the small anomaly count (30 events in 388 samples); the FPR CI ([1.6%, 5.3%]) is tighter because FPR is computed on the much larger normal class (358 samples). Both CIs are fully below/above their respective thresholds (90% and 15%), confirming the targets are met at 95% statistical confidence.
 
 ### 4.5.5 Forecasting Model Comparison
+
+ARIMA model order was selected using the Box-Jenkins identification procedure applied to the autocorrelation function (ACF) and partial autocorrelation function (PACF) of the first-differenced UPF CPU series.
+
+![Figure 4.13: ARIMA ACF and PACF Plots for Model Order Selection](../ml/figures/arima_acf_pacf.png)
+
+**Figure 4.13: ACF (top) and PACF (bottom) of the first-differenced UPF CPU utilisation series. The PACF cuts off after lag 3 (suggesting AR(3)); the ACF cuts off after lag 1 (suggesting MA(1)). Combined with AIC minimisation, this identifies ARIMA(3,0,1) as the optimal order for the synthetic series.**
+
+![Figure 4.14: ARIMA(3,0,1) Forecast with 95% Confidence Intervals](../ml/figures/arima_forecast.png)
+
+**Figure 4.14: ARIMA(3,0,1) 20-step-ahead forecast on the synthetic UPF CPU load series (blue line) with 95% prediction intervals (shaded region). The near-constant synthetic load yields tight intervals and MAPE 3.64%. The same model applied to real diurnal data (Section 4.5.5 discussion) inflates MAPE to 184.99%, motivating the ensemble approach.**
 
 ![Figure 4.16: SARIMA/Prophet/Ensemble Prediction Intervals on Diurnal Data](../ml/figures/prediction_intervals.png)
 
