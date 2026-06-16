@@ -345,6 +345,9 @@ This research was conducted at HIT during the period January–June 2026 as a Fi
 | Figure | Caption | Page |
 |---|---|---|
 | Figure 3.1 | Overall System Architecture: Local + AWS with AI/ML Pipeline | 51 |
+| Figure 3.2 | 5G Network Slicing — Three-Slice Architecture: eMBB (SST=1), mMTC (SST=2), URLLC (SST=3) with QoS Profiles | 58 |
+| Figure 3.3 | AI/ML Pipeline — Prometheus → Feature Engineering → ML Models → Ensemble Decision → Closed-Loop → HPA | 70 |
+| Figure 3.4 | AWS Cloud Infrastructure — EKS Deployment with IRSA, AMP, SageMaker BYOC, Bedrock, S3, and SNS | 80 |
 | Figure 4.2 | Scenario 1: Diurnal Load Pattern — CPU Utilisation, Replica Count, and Latency Percentiles | 120 |
 | Figure 4.3 | Scenario 2: Flash Crowd — CPU Spike Timeline, HPA Response, and Latency | 122 |
 | Figure 4.4 | Scenario 2: HPA Response Time per Repetition | 122 |
@@ -934,9 +937,9 @@ The complete system architecture comprises two deployment environments connected
 
 The PLMN identity used throughout is MCC=999, MNC=70 — the ITU-designated test PLMN reserved for laboratory use, ensuring no interference with any deployed public mobile network.
 
-![Figure 3.1: Overall System Architecture — Local Development and AWS Cloud Deployment with AI/ML Pipeline](../docs/architecture.png)
+![Figure 3.1: Overall System Architecture — Local Development and AWS Cloud Deployment with AI/ML Pipeline](../docs/figures/architecture_overview.png)
 
-**Figure 3.1: Overall System Architecture showing the two-environment deployment. Left: local kind cluster on M1 macOS with 14 Open5GS NFs, UERANSIM UE/gNB, and Prometheus scraping. Right: AWS EKS with ECR images, AMP, AMG, SageMaker BYOC endpoints, Bedrock AI advisor, S3 model storage, and SNS alerting. The closed-loop automation engine bridges both environments via PromQL queries and kubectl scaling commands.**
+**Figure 3.1: Overall System Architecture showing the two-environment deployment. Left: local kind cluster on M1 macOS with 14 Open5GS NFs (AMF, SMF, UPF, NRF, UDM, UDR, AUSF, PCF, NSSF, BSF, SCP) and UERANSIM UE/gNB connected via SCTP. Observability flows from all NFs to Prometheus, which remote-writes to Amazon Managed Prometheus. Right: AWS EKS cluster (2×t3.medium) running the same Open5GS NF images pulled from ECR, with SageMaker BYOC endpoints serving the three trained ML models, Amazon Bedrock providing the 4-tier AI cascade (Claude Sonnet 4.6 → Haiku 4.5 → Nova Lite → Nova Micro), S3 storing model artefacts, and SNS delivering alerts. The closed-loop automation engine polls Prometheus every 30 seconds, invokes SageMaker endpoints for anomaly/forecast/state inference, and issues kubectl scale commands when anomaly scores exceed the 0.5849 threshold.**
 
 ## 3.3 Phase 1: 5G Core Build Methodology
 
@@ -1149,6 +1152,10 @@ plmn_support:
 
 QoS differentiation between slices was implemented through PCF policy rules: each DNN is associated with a 5QI (5G QoS Indicator) that specifies guaranteed bit rate, priority, and packet delay budget. URLLC uses 5QI=82 (highest priority, 10ms PDB); eMBB uses 5QI=9 (best-effort data); mMTC uses 5QI=70 (low-priority data).
 
+![Figure 3.2: 5G Network Slicing — Three-Slice Architecture with Dedicated UPF and Per-Slice QoS](../docs/figures/network_slicing.png)
+
+**Figure 3.2: 5G Network Slicing architecture showing three simultaneously active network slices sharing a common gNB and 5GC control plane. Left: three UEs each associated with a distinct S-NSSAI (SST=1/eMBB, SST=2/mMTC, SST=3/URLLC) requesting slice-specific PDU sessions. Centre columns: per-slice QoS profiles, IP address pools (10.45.0.0/16, 10.46.0.0/16, 10.47.0.0/16), and dedicated SMF+UPF data plane instances. Right: SLA badges confirming throughput and latency targets met under 30-UE synthetic load. Shared AMF/NRF/UDM/UDR control plane at bottom provides slice selection via NSSF.**
+
 ## 3.9 AI/ML Methodology
 
 ### 3.9.1 Data Collection and Synthetic Data Generation
@@ -1162,6 +1169,10 @@ The generator simulates a 5-hour operational window at 30-second intervals (600 
 - Injected anomaly events (30 events at random timesteps) with characteristic signatures (sudden CPU spike, replica increase, latency increase)
 
 The 388-sample training dataset was assembled from: 358 synthetic normal/high-load samples + 30 synthetic anomaly events. The 70/30 train-test split was applied before cross-validation.
+
+![Figure 3.3: AI/ML Pipeline — Prometheus Metrics to Autonomous HPA Action](../docs/figures/ml_pipeline.png)
+
+**Figure 3.3: End-to-end AI/ML pipeline comprising six stages. Stage 1 (Data Ingestion): Prometheus scrapes 22 targets at 30-second intervals, remote-writing to Amazon Managed Prometheus (2.66 GB metrics store). Stage 2 (Feature Extraction): raw NF metrics are transformed into a 3-feature anomaly vector [cpu_upf, upf_replicas, cpu_amf] and a 19-feature classification vector (14 NF CPU columns + 5 scalar columns), with StandardScaler normalisation and PCA dimensionality reduction for the k-Means path. Stage 3 (ML Models): four models run in parallel — Isolation Forest (contamination=0.15, 93.3% recall), SARIMA+Prophet ensemble (MAPE 12.93%, 12-step ahead), k-Means (k=2, silhouette=0.634, 6 network states), and SHAP TreeExplainer (upf_replicas feature importance 0.962). Stage 4 (SageMaker BYOC): models are served via three SageMaker endpoints using scikit-learn 1.8.0 containers. Stage 5 (Ensemble Decision): anomaly score is compared against threshold 0.5849; if exceeded, Bedrock cascade is invoked for root-cause analysis and the target UPF replica count is set to min(5, current+1). Stage 6 (Outcomes): kubectl scale command is issued, HPA adjusts UPF replicas, and the event is logged in structured DETECT→DECIDE→ACT format.**
 
 ### 3.9.2 Feature Engineering
 
@@ -1373,6 +1384,10 @@ No AWS credentials (access key ID, secret access key) are stored in Kubernetes s
 3. The pod's projected service account token is mounted at `/var/run/secrets/eks.amazonaws.com/serviceaccount/token`.
 4. `boto3` (the AWS SDK) automatically discovers this token via the `AWS_WEB_IDENTITY_TOKEN_FILE` environment variable set by the EKS admission controller.
 5. `boto3` calls STS `AssumeRoleWithWebIdentity` to exchange the token for temporary credentials (valid 1 hour, auto-renewed).
+
+![Figure 3.4: AWS Cloud Infrastructure — EKS Deployment with IRSA, AMP, SageMaker BYOC, Bedrock, S3, and SNS](../docs/figures/aws_deployment.png)
+
+**Figure 3.4: AWS cloud infrastructure for the 5G SA Core deployment in us-east-1. The EKS cluster (2×t3.medium nodes) runs inside a VPC with private subnets across two availability zones. Open5GS NF pods and the 5G AI Service Account use IRSA (dashed bidirectional arrows) for all AWS API calls — no static credentials are stored anywhere. Amazon ECR (15 repositories) supplies container images to the EKS node group. In-cluster Prometheus remote-writes metrics to Amazon Managed Prometheus (AMP, 2.66 GB), which feeds Amazon Managed Grafana (7 dashboards). The closed-loop engine invokes three SageMaker BYOC endpoints (anomaly-detector, traffic-forecaster, state-classifier) using scikit-learn 1.8.0 containers. Amazon Bedrock (Claude Sonnet 4.6 cascade) provides AI analysis. Model artefacts (.pkl files) are stored in S3. Amazon SNS delivers alert notifications. Total 7-day pilot cost: $32.36, representing a 99.4% TCO reduction versus equivalent on-premises dedicated hardware.**
 
 ## 3.12 Phase 8.7: AI-Ops Integration Methodology
 
