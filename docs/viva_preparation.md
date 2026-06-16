@@ -379,11 +379,11 @@ The thesis explicitly acknowledges (Limitation 1) that n=388 ML training samples
 
 ## 9. Comparison with Real Operators
 
-**Q: How does this compare to a real operator's core network — for example, MTN Zimbabwe?**
+**Q: How does this compare to a real operator's core network — for example, Econet Zimbabwe?**
 
-A: MTN Zimbabwe operates a commercial 4G EPC (Evolved Packet Core) with Huawei-supplied hardware (MME, S-GW, P-GW, HSS). Their 5G deployment is 5G NSA (Non-Standalone): 5G NR radio with 4G EPC core — the "SA" in this project (3GPP Release 16 5G Standalone) uses a fundamentally different architecture. Key contrasts:
+A: Econet Zimbabwe operates a commercial 4G EPC (Evolved Packet Core) with Huawei-supplied hardware (MME, S-GW, P-GW, HSS). Their 5G deployment is 5G NSA (Non-Standalone): 5G NR radio with 4G EPC core — the "SA" in this project (3GPP Release 16 5G Standalone) uses a fundamentally different architecture. Key contrasts:
 
-| Dimension | This Project | MTN Zimbabwe (estimated) |
+| Dimension | This Project | Econet Zimbabwe (estimated) |
 |-----------|-------------|------------------------|
 | Core architecture | 5G SA (3GPP Rel. 16, service-based) | 4G EPC + 5G NSA |
 | Hardware | Commodity cloud (AWS t3.medium) | Huawei proprietary COTS servers |
@@ -396,7 +396,7 @@ A: MTN Zimbabwe operates a commercial 4G EPC (Evolved Packet Core) with Huawei-s
 | Slice QoS enforcement | Demonstrated (ANOVA p<0.0001) | Not available in NSA mode (EPC has no native slicing) |
 | AI/ML operations | Production (closed-loop + Bedrock) | Limited proprietary analytics only |
 
-**What this project *cannot* claim:** performance under real GTP-U packet loads at MTN scale, handover between physical base stations, licensed spectrum interference management, or roaming interoperability.
+**What this project *cannot* claim:** performance under real GTP-U packet loads at Econet scale, handover between physical base stations, licensed spectrum interference management, or roaming interoperability.
 
 **What this project *can* claim:** the architecture, NF interaction patterns, SBI protocols, HPA behaviour, and ML pipeline are production-representative. The cost figures ($32.36 for 7 days) are from a real AWS bill, not a simulation. An operator migrating from EPC to a cloud-native 5G SA core would follow the same Kubernetes + Prometheus + SageMaker pattern demonstrated here. This is precisely the evidence gap that motivates the research (Section 1.3).
 
