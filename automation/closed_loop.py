@@ -6,6 +6,8 @@ Runs permanently in the cluster, polling every 30 s:
 
   1. Query Prometheus for current UPF CPU, replicas, latency
   2. Invoke SageMaker anomaly-detector-endpoint — if anomaly detected, scale UPF
+  2.5 Predictive pre-scale via local ARIMA — forecast UE count 30 min ahead;
+       if any step > 100 UEs and replicas < 3, proactively scale to 3 now
   3. Invoke SageMaker traffic-forecaster-endpoint — if >150 UEs predicted, pre-scale to 3
   4. Invoke SageMaker state-classifier-endpoint  — log network state
   5. [Phase 8.7] Invoke Claude Bedrock for AI analysis when:
@@ -34,6 +36,7 @@ Environment variables:
   BEDROCK_REGION        default: us-east-1
   S3_BUCKET             default: 5g-core-ml-models-749534910877
   SNS_TOPIC_ARN         default: arn:aws:sns:us-east-1:749534910877:5g-core-network-alerts
+  ARIMA_MODEL_PATH      default: ../ml/models/arima_model.pkl  (local ARIMA for step 2.5)
 """
 
 import os
@@ -42,6 +45,7 @@ import time
 import math
 import json
 import logging
+import pickle
 import subprocess
 import urllib.request
 import urllib.parse
@@ -84,8 +88,18 @@ DRY_RUN             = os.environ.get("DRY_RUN", "false").lower() == "true"
 SCALE_MIN       = 1
 SCALE_MAX       = 5
 PROACTIVE_REPS  = 3    # replicas to set when forecast predicts high load
-FORECAST_THRESH = 150  # UEs — if any of next-6h predictions exceed this, pre-scale
+FORECAST_THRESH = 150  # UEs — SageMaker endpoint pre-scale threshold
 ANOMALY_THRESH  = 0.6  # Bedrock trigger threshold
+
+# Predictive pre-scaling (local ARIMA model, 30-min horizon)
+PREDICTIVE_THRESH   = 100   # UE forecast threshold for proactive pre-scaling
+PREDICTIVE_STEPS    = 6     # steps to forecast (6 × 5-min = 30 min ahead)
+PREDICTIVE_INTERVAL = 300   # seconds per forecast step
+ARIMA_MODEL_PATH    = os.environ.get(
+    "ARIMA_MODEL_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 "..", "ml", "models", "arima_model.pkl"),
+)
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 os.makedirs(os.path.dirname(LOG_FILE) if os.path.dirname(LOG_FILE) else ".", exist_ok=True)
@@ -231,10 +245,14 @@ _daily_stats: dict = {
     "cpu_samples"           : 0,
     "max_replicas"          : 1,
     "total_scale_events"    : 0,
+    "proactive_scale_events": 0,   # pre-scales triggered by local ARIMA forecast
     "total_ue_registrations": 0,
     "bedrock_invocations"   : 0,
     "sagemaker_invocations" : 0,
 }
+
+# Lazy-loaded local ARIMA model (loaded once, reused every poll cycle)
+_arima_model = None
 
 # ── Bedrock helper wrappers ───────────────────────────────────────────────────
 def bedrock_analyse(
@@ -287,6 +305,124 @@ def bedrock_health_score(metrics: dict) -> dict | None:
     except Exception as e:
         log.error(f"[BEDROCK] get_network_health_score failed: {e}")
         return None
+
+
+# ── Local ARIMA predictive pre-scaling ───────────────────────────────────────
+
+def _load_arima_model():
+    """Load the ARIMA model from disk once; cache in _arima_model."""
+    global _arima_model
+    if _arima_model is not None:
+        return _arima_model
+    try:
+        with open(ARIMA_MODEL_PATH, "rb") as f:
+            _arima_model = pickle.load(f)
+        log.info(f"[{now_str()}] ARIMA model loaded from {ARIMA_MODEL_PATH}")
+        return _arima_model
+    except Exception as e:
+        log.warning(f"ARIMA model unavailable ({ARIMA_MODEL_PATH}): {e}")
+        return None
+
+
+def predict_and_prescale(cur_ue_count: float, cur_reps: int) -> dict:
+    """
+    Use the locally-loaded ARIMA model to forecast UE count PREDICTIVE_STEPS
+    steps ahead (each step = PREDICTIVE_INTERVAL seconds = 5 min, so the
+    horizon is 30 minutes).
+
+    If the peak forecast exceeds PREDICTIVE_THRESH UEs and the current UPF
+    replica count is below PROACTIVE_REPS, the UPF is scaled up *now*, before
+    the traffic arrives.  This is proactive (time-series driven) as opposed to
+    the reactive anomaly-detection path.
+
+    Returns a dict with keys:
+      forecast        — list of PREDICTIVE_STEPS float predictions
+      max_ue          — peak predicted UE count
+      peak_min        — minutes ahead at which peak occurs
+      action          — "pre-scaled to N" | "none"
+      proactive_event — True when a scaling action was issued
+    """
+    model = _load_arima_model()
+    if model is None:
+        return {}
+
+    # Use recent CPU-proxied history if available; seed with cur_ue_count otherwise.
+    history = list(_ue_history) if len(_ue_history) >= 3 else [cur_ue_count]
+
+    try:
+        try:
+            # Apply new observations then forecast (statsmodels ARIMA idiom).
+            forecast = list(model.apply(history).forecast(steps=PREDICTIVE_STEPS))
+        except Exception:
+            # Simpler fallback: in-sample model forecast without conditioning.
+            forecast = list(model.forecast(steps=PREDICTIVE_STEPS))
+    except Exception as e:
+        log.warning(f"ARIMA forecast error: {e}")
+        return {}
+
+    forecast   = [max(0.0, v) for v in forecast]   # clamp negatives
+    max_ue     = max(forecast) if forecast else 0.0
+    peak_step  = forecast.index(max(forecast)) + 1 if forecast else 0
+    peak_min   = peak_step * (PREDICTIVE_INTERVAL // 60)
+
+    result: dict = {
+        "forecast"       : [round(v, 1) for v in forecast],
+        "max_ue"         : round(max_ue, 1),
+        "peak_min"       : peak_min,
+        "action"         : "none",
+        "proactive_event": False,
+    }
+
+    if max_ue > PREDICTIVE_THRESH and cur_reps < PROACTIVE_REPS:
+        log.info(
+            f"[{now_str()}] PREDICTIVE: forecast shows {max_ue:.0f} UEs at "
+            f"T+{peak_min}min, pre-scaling UPF to {PROACTIVE_REPS} replicas"
+        )
+        if scale_upf(PROACTIVE_REPS):
+            _daily_stats["total_scale_events"]    += 1
+            _daily_stats["proactive_scale_events"] += 1
+            result["action"]         = f"pre-scaled to {PROACTIVE_REPS}"
+            result["proactive_event"] = True
+
+        event(
+            detect=(
+                f"ARIMA_forecast_max={max_ue:.0f} UEs at T+{peak_min}min "
+                f"(threshold={PREDICTIVE_THRESH}) cur_replicas={cur_reps}"
+            ),
+            decide=(
+                f"predictive pre-scale — traffic surge expected in {peak_min} min"
+            ),
+            act=(
+                f"UPF proactively scaled to {PROACTIVE_REPS} replicas"
+                + (" (dry-run)" if DRY_RUN else "")
+            ),
+        )
+
+        if _BEDROCK_OK:
+            bedrock_analyse(
+                event_type  = "predictive_scaling",
+                severity    = "medium",
+                cpu         = 0.0,
+                cpu_amf     = 0.0,
+                reps        = cur_reps,
+                anom_score  = 0.0,
+                state       = _prev_network_state,
+                fc_max      = max_ue,
+                restarts    = 0,
+                description = (
+                    f"Local ARIMA model forecasts {max_ue:.0f} UEs at "
+                    f"T+{peak_min}min, exceeding proactive threshold "
+                    f"{PREDICTIVE_THRESH}. Pre-scaling UPF from {cur_reps} "
+                    f"to {PROACTIVE_REPS} replicas before traffic arrives."
+                ),
+            )
+    else:
+        log.debug(
+            f"[{now_str()}] PREDICTIVE: max_fc={max_ue:.0f} UEs "
+            f"cur_reps={cur_reps} — within limits, no pre-scale"
+        )
+
+    return result
 
 
 # ── Main control loop ─────────────────────────────────────────────────────────
@@ -407,6 +543,9 @@ def run_once():
             decide="cannot determine anomaly status",
             act="none — will retry",
         )
+
+    # 2.5 ── Predictive pre-scaling via local ARIMA (30-min horizon)
+    predict_and_prescale(cur_ue_count=cpu, cur_reps=cur_reps)
 
     # 3 ── Forecast-based pre-scaling (only if we have enough history)
     fc6 = []
