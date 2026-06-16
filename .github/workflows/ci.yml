@@ -1,0 +1,91 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Pytest Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install --no-cache-dir \
+            pytest flask boto3 \
+            scikit-learn statsmodels joblib \
+            pandas numpy
+
+      - name: Create stub ML models for CI
+        run: |
+          python - <<'EOF'
+          import os, pickle, numpy as np
+          from sklearn.ensemble import IsolationForest
+          from sklearn.cluster import KMeans
+          from sklearn.preprocessing import StandardScaler
+          from sklearn.decomposition import PCA
+
+          # statsmodels may not support ARIMA in all CI envs; use a minimal fitted model
+          try:
+              from statsmodels.tsa.arima.model import ARIMA as SM_ARIMA
+              arima_model = SM_ARIMA(np.linspace(0, 1, 40), order=(3, 0, 1)).fit()
+          except Exception:
+              arima_model = None
+
+          MODEL_DIR = "ml/models"
+          os.makedirs(MODEL_DIR, exist_ok=True)
+
+          def _needs_stub(path):
+              if not os.path.exists(path) or os.path.getsize(path) == 0:
+                  return True
+              # Also replace if unpickling fails (cross-version pandas/statsmodels)
+              try:
+                  with open(path, "rb") as _f:
+                      pickle.load(_f)
+                  return False
+              except Exception:
+                  print(f"  {path} not loadable — will replace with stub")
+                  return True
+
+          if _needs_stub(f"{MODEL_DIR}/isolation_forest.pkl"):
+              X3 = np.zeros((20, 3))
+              clf = IsolationForest(n_estimators=10, random_state=42).fit(X3)
+              sc3 = StandardScaler().fit(X3)
+              import joblib
+              joblib.dump(clf, f"{MODEL_DIR}/isolation_forest.pkl")
+              joblib.dump(sc3, f"{MODEL_DIR}/anomaly_scaler.pkl")
+              print("Created stub: isolation_forest + anomaly_scaler")
+
+          if arima_model and _needs_stub(f"{MODEL_DIR}/arima_model.pkl"):
+              with open(f"{MODEL_DIR}/arima_model.pkl", "wb") as f:
+                  pickle.dump(arima_model, f)
+              print("Created stub: arima_model")
+
+          if _needs_stub(f"{MODEL_DIR}/kmeans_model.pkl"):
+              import joblib
+              X19  = np.zeros((20, 19))
+              sc19 = StandardScaler().fit(X19)
+              pca  = PCA(n_components=5).fit(sc19.transform(X19))
+              km   = KMeans(n_clusters=2, n_init=5, random_state=42).fit(
+                         pca.transform(sc19.transform(X19)))
+              joblib.dump(km,   f"{MODEL_DIR}/kmeans_model.pkl")
+              joblib.dump(sc19, f"{MODEL_DIR}/cluster_scaler.pkl")
+              joblib.dump(pca,  f"{MODEL_DIR}/cluster_pca.pkl")
+              print("Created stub: kmeans + cluster_scaler + cluster_pca")
+          EOF
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --tb=short
