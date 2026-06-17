@@ -336,7 +336,12 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # SMF → NRF, PCF, UDM, BSF, SCP: SBI
+    # SMF → NRF, PCF, UDM, BSF, SCP, AMF: SBI
+    # BUG FIX: AMF was missing from this list. SMF must POST to AMF's
+    # Namf_Communication/N1N2MessageTransfer endpoint to deliver the PDU
+    # Session Establishment Accept NAS message to the UE via gNB. Without
+    # this rule the N1N2 HTTP/2 POST was silently dropped by the kernel and
+    # uesimtun0 was never created.
     - to:
         - podSelector:
             matchLabels:
@@ -353,6 +358,9 @@ spec:
         - podSelector:
             matchLabels:
               app: scp
+        - podSelector:
+            matchLabels:
+              app: amf
       ports:
         - port: 80
           protocol: TCP
@@ -433,6 +441,20 @@ spec:
               app: smf
       ports:
         - port: 8805
+          protocol: UDP
+    # UPF → gNB: downlink GTP-U (N3 interface, UDP 2152)
+    # BUG FIX: gNB runs at 10.244.x.x (Flannel pod CIDR), which falls inside
+    # the 10.0.0.0/8 "except" block of the internet egress rule below. The
+    # original policy therefore blocked all UPF→gNB GTP-U downlink packets,
+    # making the data plane one-way (uplink only). Adding an explicit gNB rule
+    # before the ipBlock ensures downlink GTP-U is permitted regardless of
+    # the RFC1918 exclusion on the internet rule.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: gnb
+      ports:
+        - port: 2152
           protocol: UDP
     # UPF → internet: N6 data plane (UE traffic egress — all ports/protocols)
     # Restricted to non-RFC1918 destinations; NAT masquerade handles the rest.
