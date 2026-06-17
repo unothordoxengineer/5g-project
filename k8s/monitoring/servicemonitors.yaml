@@ -85,3 +85,22 @@ spec:
       path: /metrics
       interval: 15s
       fallbackScrapeProtocol: PrometheusText0.0.4
+---
+# --- network-query-api (anomaly_score, UE count, UPF CPU via IsolationForest ML) ---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: network-query-api
+  namespace: monitoring
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames: [open5gs]
+  selector:
+    matchLabels:
+      app: network-query-api
+  endpoints:
+    - port: http
+      path: /metrics/prom
+      interval: 15s

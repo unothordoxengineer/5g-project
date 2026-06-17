@@ -31,6 +31,18 @@ spec:
             summary: "UPF CPU usage above 70% of limit"
             description: "UPF total CPU rate is {{ $value | humanizeDuration }}/s (threshold: 0.35 cores = 70% of 500m limit). HPA should scale up."
 
+        # Anomaly score from IsolationForest ML model — threshold 0.60 validated in Scenario 6
+        - alert: Open5GSAnomalyScoreHigh
+          expr: open5gs_anomaly_score > 0.60
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "5G core anomaly detected"
+            description: >-
+              IsolationForest anomaly score {{ $value | printf "%.4f" }} exceeds the Scenario 6
+              validated threshold of 0.60. Closed-loop engine will trigger UPF scaling.
+
         # HPA at max replicas
         - alert: UPFHPAMaxReplicas
           expr: |

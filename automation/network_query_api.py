@@ -32,7 +32,7 @@ import urllib.error
 from datetime import datetime, timezone
 from threading import Lock
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, Response
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 PROMETHEUS_URL = os.environ.get(
@@ -726,6 +726,25 @@ def metrics_endpoint():
         "metrics":   m,
         "timestamp": m.get("timestamp", datetime.now(timezone.utc).isoformat()),
     })
+
+
+@app.route("/metrics/prom", methods=["GET"])
+def metrics_prom():
+    """Prometheus text exposition format scraped by ServiceMonitor."""
+    m = _get_current_metrics()
+    lines = [
+        "# HELP open5gs_anomaly_score IsolationForest anomaly score (0=normal, alert threshold=0.60)",
+        "# TYPE open5gs_anomaly_score gauge",
+        f"open5gs_anomaly_score {m.get('anomaly_score', 0.0):.6f}",
+        "# HELP open5gs_ue_count Registered UEs in the 5G core",
+        "# TYPE open5gs_ue_count gauge",
+        f"open5gs_ue_count {float(m.get('ue_count', 0)):.0f}",
+        "# HELP open5gs_upf_cpu_pct UPF CPU utilisation percentage",
+        "# TYPE open5gs_upf_cpu_pct gauge",
+        f"open5gs_upf_cpu_pct {m.get('cpu_upf_pct', 0.0):.4f}",
+        "",
+    ]
+    return Response("\n".join(lines), content_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @app.route("/ask", methods=["POST"])
