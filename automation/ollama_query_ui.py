@@ -83,6 +83,11 @@ HTML = """<!DOCTYPE html>
                  letter-spacing: 0.05em; }
   .stat .value { font-size: 1.1rem; font-weight: 600; color: #38bdf8;
                  margin-top: 2px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .ex-btn { padding: 6px 12px; background: #1e293b; border: 1px solid #334155;
+            border-radius: 20px; color: #94a3b8; font-size: 0.78rem;
+            cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+  .ex-btn:hover { border-color: #38bdf8; color: #e2e8f0; }
 </style>
 </head>
 <body>
@@ -117,6 +122,12 @@ HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="examples">
+    <button class="ex-btn" onclick="preset('What is the current network health?')">What is the current network health?</button>
+    <button class="ex-btn" onclick="preset('Is the URLLC slice meeting its SLA?')">Is the URLLC slice meeting its SLA?</button>
+    <button class="ex-btn" onclick="preset('Should I scale up UPF replicas?')">Should I scale up UPF replicas?</button>
+    <button class="ex-btn" onclick="preset('Is the current anomaly score a concern?')">Is the current anomaly score a concern?</button>
+  </div>
   <label for="q">Ask a question about the network</label>
   <input id="q" type="text" placeholder="e.g. Why is the UPF at 2 replicas?" autofocus>
   <button id="btn" onclick="ask()">Ask</button>
@@ -124,6 +135,11 @@ HTML = """<!DOCTYPE html>
 </div>
 
 <script>
+function preset(q) {
+  document.getElementById('q').value = q;
+  ask();
+}
+
 async function ask() {
   const q = document.getElementById('q').value.trim();
   if (!q) return;
